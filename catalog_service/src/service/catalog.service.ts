@@ -6,22 +6,26 @@ export class CatalogService {
     }
 
     async createProduct(product: Product): Promise<Product> {
-        return await this.repository.create(product);
+        const data = await this.repository.create(product);
+        if (!data.id) {
+            throw new Error('unable to create product');
+        }
+        return data;
     }
 
-    update(product: Product): Promise<Product> {
+    async update(product: Product): Promise<Product> {
         return this.repository.update(product);
     }
 
-    delete(id: string): Promise<void> {
+    async delete(id: string): Promise<void> {
         return this.repository.delete(id);
     }
 
-    findAll(filter: { limit: number, offset: number }): Promise<Product[]> {
-        return this.repository.findAll();
+    async findAll(filter: { limit: number, offset: number }): Promise<Product[]> {
+        return this.repository.findAll(filter);
     }
 
-    findById(id: string): Promise<Product> {
+    async findById(id: string): Promise<Product> {
         return this.repository.findById(id);
     }
 
