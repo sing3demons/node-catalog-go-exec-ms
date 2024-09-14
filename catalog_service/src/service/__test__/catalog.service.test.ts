@@ -12,7 +12,7 @@ const productFactory = new Factory<Product>()
     .attr('price', +faker.commerce.price())
     .attr('image', faker.image.url())
     .attr('stock', faker.number.int({ min: 1, max: 100 }))
-const p = productFactory.build()
+
 
 const mockProduct = (rest: any) => {
     return {

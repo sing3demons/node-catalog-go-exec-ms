@@ -5,12 +5,23 @@ export class CatalogService {
     constructor(private readonly repository: ICatalogRepository) {
     }
 
-    async createProduct(product: Product): Promise<Product> {
-        const data = await this.repository.create(product);
-        if (!data.id) {
-            throw new Error('unable to create product');
+    async createProduct(product: Product): Promise<{ err: boolean, data: Product }> {
+        try {
+            const data = await this.repository.create(product);
+            if (!data.id) {
+                throw new Error('unable to create product');
+            }
+            return {
+                err: false,
+                data
+            }
+        } catch (error) {
+            return {
+                err: true,
+                data: error as Product
+            }
+
         }
-        return data;
     }
 
     async update(product: Product): Promise<Product> {
