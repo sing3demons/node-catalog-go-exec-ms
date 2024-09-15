@@ -22,30 +22,27 @@ export class CatalogRepository implements ICatalogRepository {
         return this._prisma
     }
 
-    async create(product: Product, logger: HttpLogger): Promise<Product> {
+    async create(product: Product & { username: string }, logger: HttpLogger): Promise<Product> {
         try {
-            const data = {
-                ...product,
-                createBy: 'admin',
-                updateBy: 'admin',
-            }
-            return await this.query(logger).product.create({
-                data,
-                select: {
-                    id: true,
-                    name: true,
-                    description: true,
-                    price: true,
-                    image: true,
-                    stock: true,
-                },
+            const result = await this.query(logger).product.create({
+                data: {
+                    name: product.name,
+                    description: product.description,
+                    price: product.price,
+                    image: product.image,
+                    stock: product.stock,
+                    createBy: product.username,
+                    updateBy: product.username,
+                }
             }) as Product;
+            logger.info(result, `product created`)
+            return result
         } catch (error) {
             throw new Error('unable to create product');
         }
     }
 
-    async update(product: Product, logger: HttpLogger): Promise<Product | null> {
+    async update(product: Product & { username: string }, logger: HttpLogger): Promise<Product | null> {
         const productExist = await this.query(logger).product.findUnique({
             where: { id: product.id, deleted: false }
         })
@@ -62,15 +59,7 @@ export class CatalogRepository implements ICatalogRepository {
                 price: product.price || productExist?.price,
                 image: product.image || productExist?.image,
                 stock: product.stock || productExist?.stock,
-                updateBy: 'admin',
-            },
-            select: {
-                id: true,
-                name: true,
-                description: true,
-                price: true,
-                image: true,
-                stock: true,
+                updateBy: product.username,
             },
         })
 

@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { AppRouter } from '../my-router';
 import { CatalogService } from '../service/catalog.service';
 import { CatalogRepository } from '../repository/catalog.repository';
-import { z } from 'zod';
 import { ProductSchema, ProductUpdateSchema, QuerySchema } from '../models/product.model';
 import { HttpLogger } from '../logger';
 
@@ -13,8 +12,9 @@ const appRouter = new AppRouter(router)
 
 appRouter.post('/product',
     async ({ body, req }) => {
+        const username = req?.user?.username || 'anonymous'
         const logger = new HttpLogger(req)
-        const result = await catalogService.createProduct(body, logger)
+        const result = await catalogService.createProduct({ ...body, username }, logger)
         logger.flush()
         return result
     }, {
@@ -23,8 +23,9 @@ appRouter.post('/product',
 
 appRouter.patch('/product/:id',
     async ({ body, params, req }) => {
+        const username = req?.user?.username || 'anonymous'
         const logger = new HttpLogger(req)
-        const result = await catalogService.update({ ...body, id: params.id }, logger)
+        const result = await catalogService.update({ ...body, id: params.id, username }, logger)
         logger.flush()
         return result
 

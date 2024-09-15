@@ -7,7 +7,7 @@ export class CatalogService {
     constructor(private readonly repository: ICatalogRepository) { }
     private CATALOG_BASE_URL = process.env.CATALOG_BASE_URL || ''
 
-    async createProduct(product: Product, logger: HttpLogger): Promise<BaseResponse> {
+    async createProduct(product: Product & { username: string }, logger: HttpLogger): Promise<BaseResponse> {
         const response: BaseResponse = {}
         try {
             const data = await this.repository.create(product, logger)
@@ -23,7 +23,7 @@ export class CatalogService {
         }
     }
 
-    async update(product: Partial<Product>, logger: HttpLogger): Promise<BaseResponse> {
+    async update(product: Partial<Product> & { username: string }, logger: HttpLogger): Promise<BaseResponse> {
         const response: BaseResponse = {}
         try {
             const result = await this.repository.update(product, logger);
