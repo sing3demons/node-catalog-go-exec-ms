@@ -11,11 +11,11 @@ export const StartServer = async () => {
     });
 
     process.on('unhandledRejection', (reason, promise) => {
-        console.error(`Unhandled Rejection at: ${promise}, reason: ${reason}`);
+        logger.error(`Unhandled Rejection at: ${promise}, reason: ${reason}`);
     })
 
     process.on('uncaughtException', async (error) => {
-        console.error(`Uncaught Exception thrown: ${error}`);
+        logger.error(`Uncaught Exception thrown: ${error}`);
         await disconnect();
         process.exit(1);
     });

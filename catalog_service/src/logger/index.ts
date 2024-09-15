@@ -13,7 +13,6 @@ const transport = pino.transport({
         interval: '5s',
         compress: 'gzip',
         size: '10MB',
-
     },
 })
 
@@ -22,7 +21,8 @@ const _logger = pino(transport)
 export const logger = pino({
     base: {
         serviceName: "catalog-service",
-    }, redact: ['access_token', 'secret_token', 'password', 'stores[*].access_token'],
+    },
+    redact: ['access_token', 'secret_token', 'password', 'stores[*].access_token'],
     formatters: {
         bindings: ({ pid, hostname, }) => ({
             pid: pid, host: hostname, node_version: process.version,
@@ -57,7 +57,7 @@ export class HttpLogger {
     }
 
     error(obj: unknown, msg?: string, ...args: any[]) {
-        this._logger.error(obj, msg)
+        this._logger.error(obj, msg, ...args)
         return this
     }
 

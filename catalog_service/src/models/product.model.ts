@@ -27,3 +27,11 @@ export const ProductUpdateSchema = t.object({
     image: t.string().optional(),
     stock: t.number().optional()
 })
+
+export const QuerySchema = t.object({
+    limit: t.number().int().default(10),
+    offset: t.number().int().default(0),
+    name: t.string().optional()
+})
+
+export type IProduct = t.infer<typeof QuerySchema>

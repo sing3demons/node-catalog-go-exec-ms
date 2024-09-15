@@ -1,7 +1,7 @@
 import { ICatalogRepository } from "../interface/catalog.repository.interface";
 import type { HttpLogger } from "../logger";
-import { Product } from "../models/product.model";
-import { BaseResponse } from "../my-router";
+import { IProduct, Product } from "../models/product.model";
+import { BaseResponse, t } from "../my-router";
 
 export class CatalogService {
     constructor(private readonly repository: ICatalogRepository) { }
@@ -19,9 +19,7 @@ export class CatalogService {
         } catch (error) {
             response.statusCode = 50000
             response.message = error instanceof Error ? error.message : 'unable to create product'
-
             return response
-
         }
     }
 
@@ -32,7 +30,6 @@ export class CatalogService {
             response.data = result
             response.statusCode = 20000
             response.message = 'Product updated successfully'
-
             return response
         } catch (error) {
             response.statusCode = 40400
@@ -51,7 +48,7 @@ export class CatalogService {
         return response
     }
 
-    async findAll(filter: { limit: number, offset: number }, logger: HttpLogger): Promise<BaseResponse<Product[]>> {
+    async findAll(filter: IProduct, logger: HttpLogger): Promise<BaseResponse<Product[]>> {
         logger.info(`service`)
         const { data, total } = await this.repository.findAll(filter, logger);
         const response: BaseResponse<Product[]> = {

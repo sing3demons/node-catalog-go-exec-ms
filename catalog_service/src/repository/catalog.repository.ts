@@ -1,5 +1,5 @@
 import { ICatalogRepository } from "../interface/catalog.repository.interface";
-import { Product } from "../models/product.model";
+import { IProduct, Product } from "../models/product.model";
 import Prisma, { TPrismaClient } from "../db";
 import type { HttpLogger } from "../logger";
 
@@ -91,15 +91,15 @@ export class CatalogRepository implements ICatalogRepository {
         return true
     }
 
-    async findAll({ limit, offset }: { limit: number, offset: number }, logger: HttpLogger): Promise<{ total: number, data: Product[] }> {
+    async findAll({ limit, offset, name }: IProduct, logger: HttpLogger): Promise<{ total: number, data: Product[] }> {
         try {
             const [result, total] = await this.query(logger).$transaction([
                 this._prisma.product.findMany({
                     take: limit,
                     skip: offset,
-                    where: { deleted: false },
+                    where: { deleted: false, name: { contains: name } },
                 }),
-                this._prisma.product.count({ where: { deleted: false } })
+                this._prisma.product.count({ where: { deleted: false, name: { contains: name } } })
             ])
 
             return {
