@@ -33,7 +33,7 @@ export const logger = pino({
 
 
 })
-export const httpLogger = pinoHttp({ logger })
+export const httpLogger = pinoHttp({ logger: _logger })
 
 export interface ILogger {
     info: (obj: object, msg?: string) => void;
@@ -68,10 +68,8 @@ export class HttpLogger {
         return this
     }
 
-
-
     flush() {
-        return this._logger.flush()
+        this._logger.flush()
     }
 }
 

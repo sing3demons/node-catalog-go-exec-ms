@@ -10,7 +10,7 @@ export class CatalogService {
     async createProduct(product: Product, logger: HttpLogger): Promise<BaseResponse> {
         const response: BaseResponse = {}
         try {
-            const data = await this.repository.create(product, logger);
+            const data = await this.repository.create(product, logger)
             response.data = data
             response.statusCode = 20100
             response.message = 'Product created successfully'

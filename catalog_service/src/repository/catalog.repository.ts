@@ -114,7 +114,7 @@ export class CatalogRepository implements ICatalogRepository {
         }
     }
 
-    async findById(id: string, logger: HttpLogger): Promise<Product> {
+    async findById(id: string, logger: HttpLogger): Promise<Product | null> {
         try {
             return await this.query(logger).product.findUnique({
                 where: { id, deleted: false },
