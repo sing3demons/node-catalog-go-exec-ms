@@ -23,6 +23,7 @@ import {
     ZodArray,
 } from 'zod'
 import { fromZodError } from 'zod-validation-error'
+import { logger } from '../logger'
 
 
 const transaction = 'x-transaction-id'
@@ -125,23 +126,22 @@ class HttpError extends Error {
     }
 }
 
-function globalErrorHandler(error: unknown, _request: Request, response: Response, _next: NextFunction) {
+export function notFoundError( req: Request, res: Response, _next: NextFunction) {
+    res.status(404).json({ message: 'Unknown URL', path: req.originalUrl })
+}
+
+export function globalErrorHandler(error: unknown, _request: Request, res: Response, _next: NextFunction) {
     let statusCode = 500
     let message = 'An unknown error occurred'
-
-    if (error instanceof HttpError) {
-        statusCode = error.statusCode
-    }
-
     if (error instanceof Error) {
-        console.log(`${error.name}: ${error.message}`)
+        logger.error(error)
         message = error.message
 
         if (message.includes('not found')) {
             statusCode = 404
         }
     } else {
-        console.log('Unknown error')
+        logger.error(`Unknown error: ${String(error)}`)
         message = `An unknown error occurred, ${String(error)}`
     }
 
@@ -152,8 +152,7 @@ function globalErrorHandler(error: unknown, _request: Request, response: Respons
         data: null,
         traceStack: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined,
     }
-
-    response.status(statusCode).send(data)
+    res.status(statusCode).send(data)
 }
 
 export type AppSwagger = {

@@ -1,8 +1,9 @@
 import pino from "pino";
-import type { Request } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { pinoHttp } from "pino-http";
 import path from "path";
 import dayjs from "dayjs";
+import { v7 as uuid } from 'uuid'
 
 const transport = pino.transport({
     target: 'pino/file',
@@ -34,11 +35,18 @@ export const logger = pino({
 
 })
 export const httpLogger = pinoHttp({ logger: _logger })
-
+const transaction = 'x-transaction-id'
 export interface ILogger {
     info: (obj: object, msg?: string) => void;
     error: (obj: object, msg?: string) => void;
     warn: (obj: object, msg?: string) => void;
+}
+
+export const session = (req: Request, res: Response, next: NextFunction) => {
+    if (!req.headers[transaction]) {
+        req.headers[transaction] = uuid()
+    }
+    next()
 }
 
 export class HttpLogger {
