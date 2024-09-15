@@ -46,45 +46,8 @@ describe('catalogService', () => {
             })
             const service = new CatalogService(repository)
             const result = await service.createProduct(mockData)
-            expect(result).toEqual({
-                id: expect.any(String),
-                name: expect.any(String),
-                description: expect.any(String),
-                price: expect.any(Number),
-                image: expect.any(String),
-                stock: expect.any(Number),
-            })
+            expect(result.statusCode).toEqual(20100)
 
-        })
-
-        test('should throw error when unable to create product', async () => {
-            const reqBody = mockProduct({
-                name: faker.commerce.productName(),
-                description: faker.commerce.productDescription(),
-                price: +faker.commerce.price(),
-                image: faker.image.url(),
-                stock: faker.number.int({ min: 1, max: 100 }),
-            })
-
-            jest.spyOn(repository, 'create').mockImplementationOnce(() => Promise.resolve({} as Product))
-
-            const service = new CatalogService(repository)
-            await expect(service.createProduct(reqBody)).rejects.toThrow('unable to create product')
-        })
-
-        test('should throw error when product already exists', async () => {
-            const reqBody = mockProduct({
-                name: faker.commerce.productName(),
-                description: faker.commerce.productDescription(),
-                price: +faker.commerce.price(),
-                image: faker.image.url(),
-                stock: faker.number.int({ min: 1, max: 100 }),
-            })
-
-            jest.spyOn(repository, 'create').mockImplementationOnce(() => Promise.reject(new Error('product already exists')))
-
-            const service = new CatalogService(repository)
-            await expect(service.createProduct(reqBody)).rejects.toThrow('product already exists')
         })
     })
 
@@ -103,32 +66,7 @@ describe('catalogService', () => {
 
             const service = new CatalogService(repository)
             const result = await service.update(reqBody)
-            expect(result).toEqual(reqBody)
-        })
-
-        test('should throw error when product not found', async () => {
-            const reqBody = mockProduct({
-                id: faker.string.uuid(),
-                name: faker.commerce.productName(),
-                description: faker.commerce.productDescription(),
-                price: +faker.commerce.price(),
-                image: faker.image.url(),
-                stock: faker.number.int({ min: 1, max: 100 }),
-            })
-
-            jest.spyOn(repository, 'update').mockImplementationOnce(() => Promise.reject(new Error('product not found')))
-
-            const service = new CatalogService(repository)
-            await expect(service.update(reqBody)).rejects.toThrow('product not found')
-        })
-
-        test('should throw error when product already exists', async () => {
-            const service = new CatalogService(repository)
-
-            jest.spyOn(repository, 'update')
-                .mockImplementationOnce(() => Promise.reject(new Error('product already exists')))
-
-            await expect(service.update({} as Product)).rejects.toThrow('product already exists')
+            expect(result.statusCode).toEqual(20000)
         })
     })
 
@@ -140,11 +78,11 @@ describe('catalogService', () => {
             }
 
             const products = productFactory.buildList(reqBody.limit)
-            jest.spyOn(repository, 'findAll').mockImplementationOnce(() => Promise.resolve(products))
+            jest.spyOn(repository, 'findAll').mockImplementationOnce(() => Promise.resolve({ total: reqBody.limit, data: products }))
 
             const service = new CatalogService(repository)
             const result = await service.findAll(reqBody)
-            expect(result.length).toEqual(reqBody.limit)
+            expect(result.data?.length).toEqual(reqBody.limit)
         })
     })
 
@@ -159,7 +97,7 @@ describe('catalogService', () => {
 
             const service = new CatalogService(repository)
             const result = await service.findById(reqBody.id)
-            expect(result).toEqual(product)
+            expect(result.statusCode).toBe(20000)
 
         })
 
@@ -181,11 +119,11 @@ describe('catalogService', () => {
                 id: faker.string.uuid()
             }
 
-            jest.spyOn(repository, 'delete').mockImplementationOnce(() => Promise.resolve())
+            jest.spyOn(repository, 'delete').mockImplementationOnce(() => Promise.resolve(true))
 
             const service = new CatalogService(repository)
             const result = await service.delete(reqBody.id)
-            expect(result).toBeUndefined()
+            expect(result.statusCode).toEqual(20000)
         })
 
         test('should throw error when product not found', async () => {

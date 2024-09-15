@@ -1,12 +1,34 @@
 @base_url = http://localhost:8000
 
 
-POST {{base_url}}/product HTTP/1.1
+POST {{base_url}}/api/product HTTP/1.1
 Content-Type: application/json
 
 {
   "name": "Product 1",
   "price": 100,
   "description" : "Product 1 description",
-  "image": "product1.jpg"
+  "image": "product1.jpg",
+  "stock": 10
+}
+
+###
+GET {{base_url}}/api/product HTTP/1.1
+
+###
+GET {{base_url}}/api/product/128a64b7-a79d-4dd7-b81a-df2a05894964 HTTP/1.1
+
+###
+DELETE {{base_url}}/api/product/128a64b7-a79d-4dd7-b81a-df2a05894964 HTTP/1.1
+
+###
+PATCH {{base_url}}/api/product/128a64b7-a79d-4dd7-b81a-df2a05894964  HTTP/1.1
+Content-Type: application/json
+
+{
+  "name": "Product 1",
+  "price": 100,
+  "description" : "Product 1 description",
+  "image": "product1.jpg",
+  "stock": 10
 }

@@ -77,7 +77,7 @@ function catchAsync(fn: (...args: any[]) => any) {
     }
 }
 
-interface BaseResponse<T = unknown> {
+export interface BaseResponse<T = unknown> {
     statusCode?: number
     message?: string
     /**
