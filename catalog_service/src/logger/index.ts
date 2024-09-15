@@ -54,6 +54,9 @@ export class HttpLogger {
     private readonly _transactionId: any
 
     constructor(req: Request) {
+        if (!req.headers[transaction]) {
+            req.headers[transaction] = uuid()
+        }
         this._transactionId = req.headers['x-transaction-id']
         this._logger = logger.child({
             transactionId: this._transactionId,
