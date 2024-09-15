@@ -29,8 +29,8 @@ export const ProductUpdateSchema = t.object({
 })
 
 export const QuerySchema = t.object({
-    limit: t.number().int().default(10),
-    offset: t.number().int().default(0),
+    limit: t.string().default('10'),
+    offset: t.string().default('0'),
     name: t.string().optional()
 })
 

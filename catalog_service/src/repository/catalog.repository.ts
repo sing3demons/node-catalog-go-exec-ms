@@ -84,8 +84,8 @@ export class CatalogRepository implements ICatalogRepository {
         try {
             const [result, total] = await this.query(logger).$transaction([
                 this._prisma.product.findMany({
-                    take: limit,
-                    skip: offset,
+                    take: +limit,
+                    skip: +offset,
                     where: { deleted: false, name: { contains: name } },
                 }),
                 this._prisma.product.count({ where: { deleted: false, name: { contains: name } } })

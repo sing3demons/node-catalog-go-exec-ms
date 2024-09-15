@@ -33,9 +33,9 @@ appRouter.patch('/product/:id',
     body: ProductUpdateSchema
 })
 
-appRouter.get('/product', async ({ query: { limit = 10, offset = 0, name }, req }) => {
+appRouter.get('/product', async ({ query: { limit = "10", offset = "0", name }, req }) => {
     const logger = new HttpLogger(req)
-    logger.info(`client request`)
+    logger.info({ query: { limit, offset, name } }, `client request`)
 
     const result = await catalogService.findAll({ limit, offset, name }, logger)
     logger.flush()
