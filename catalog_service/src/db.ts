@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client'
-import type { DefaultArgs, PrismaClientOptions } from "@prisma/client/runtime/library";
+import type { DefaultArgs } from "@prisma/client/runtime/library";
 
 export type TPrismaClient = PrismaClient<{
     log: ({
@@ -17,7 +17,7 @@ export type TPrismaClient = PrismaClient<{
     })[];
 }, "query", DefaultArgs>
 
-const prisma = new PrismaClient({
+const _prisma = new PrismaClient({
     log: [
         {
             emit: 'event',
@@ -38,7 +38,11 @@ const prisma = new PrismaClient({
     ],
 })
 
+function Prisma() {
+    return _prisma
+}
 
-export default prisma;
-export const connect = async () => await prisma.$connect();
-export const disconnect = async () => await prisma.$disconnect();
+
+export default Prisma
+export const connect = async () => await _prisma.$connect();
+export const disconnect = async () => await _prisma.$disconnect();

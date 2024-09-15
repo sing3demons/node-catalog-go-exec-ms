@@ -1,4 +1,5 @@
 import { ICatalogRepository } from "../interface/catalog.repository.interface";
+import type { HttpLogger } from "../logger";
 import { Product } from "../models/product.model";
 import { BaseResponse } from "../my-router";
 
@@ -6,10 +7,10 @@ export class CatalogService {
     constructor(private readonly repository: ICatalogRepository) {
     }
 
-    async createProduct(product: Product): Promise<BaseResponse> {
+    async createProduct(product: Product, logger: HttpLogger): Promise<BaseResponse> {
         const response: BaseResponse = {}
         try {
-            const data = await this.repository.create(product);
+            const data = await this.repository.create(product, logger);
             response.data = data
             response.statusCode = 20100
             response.message = 'Product created successfully'
@@ -24,10 +25,10 @@ export class CatalogService {
         }
     }
 
-    async update(product: Partial<Product>): Promise<BaseResponse> {
+    async update(product: Partial<Product>, logger: HttpLogger): Promise<BaseResponse> {
         const response: BaseResponse = {}
         try {
-            const result = await this.repository.update(product);
+            const result = await this.repository.update(product, logger);
             response.data = result
             response.statusCode = 20000
             response.message = 'Product updated successfully'
@@ -42,16 +43,17 @@ export class CatalogService {
         }
     }
 
-    async delete(id: string): Promise<BaseResponse> {
+    async delete(id: string, logger: HttpLogger): Promise<BaseResponse> {
         const response: BaseResponse = {}
-        const data = await this.repository.delete(id);
+        const data = await this.repository.delete(id, logger);
         response.statusCode = data ? 20000 : 40400
         response.message = data ? 'Product deleted successfully' : 'Product not found'
         return response
     }
 
-    async findAll(filter: { limit: number, offset: number }): Promise<BaseResponse<Product[]>> {
-        const { data, total } = await this.repository.findAll(filter);
+    async findAll(filter: { limit: number, offset: number }, logger: HttpLogger): Promise<BaseResponse<Product[]>> {
+        logger.info(`service`)
+        const { data, total } = await this.repository.findAll(filter, logger);
         const response: BaseResponse<Product[]> = {
             statusCode: total > 0 ? 20000 : 40400,
             message: total > 0 ? 'Product found' : 'Product not found',
@@ -72,12 +74,13 @@ export class CatalogService {
         return response
     }
 
-    async findById(id: string): Promise<BaseResponse<Product>> {
+    async findById(id: string, logger: HttpLogger): Promise<BaseResponse<Product>> {
         const response: BaseResponse<Product> = {}
-        const data = await this.repository.findById(id);
+        const data = await this.repository.findById(id, logger);
         if (!data) {
             response.statusCode = 40400
             response.message = 'Product not found'
+            response.data = {} as unknown as Product
             return response
         }
 

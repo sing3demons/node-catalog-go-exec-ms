@@ -1,4 +1,6 @@
+import { Request } from "express"
 import { ICatalogRepository } from "../../interface/catalog.repository.interface"
+import { HttpLogger } from "../../logger"
 import { Product } from "../../models/product.model"
 import { MockCatalogRepository } from "../../repository/mock.catalog.repository"
 import { CatalogService } from "../catalog.service"
@@ -26,14 +28,33 @@ const mockProduct = (rest: any) => {
 }
 describe('catalogService', () => {
     let repository: ICatalogRepository
+    let logger: HttpLogger
 
     beforeEach(() => {
         repository = new MockCatalogRepository()
+        const mockRequest = {
+            body: {
+                firstName: 'J',
+                lastName: 'Doe',
+                email: 'jdoe@abc123.com',
+                password: 'Abcd1234',
+                passwordConfirm: 'Abcd1234',
+                company: 'ABC Inc.',
+            },
+            headers: {
+                'x-transaction-id': 'mock-transaction-id',
+                'content-type': 'application/json'
+
+            }
+        } as unknown as Request
+        logger = new HttpLogger(mockRequest)
     })
 
     afterEach(() => {
         repository = {} as ICatalogRepository
+        logger = {} as HttpLogger
     })
+
 
     describe('createProduct', () => {
         it('should create product', async () => {
@@ -45,7 +66,7 @@ describe('catalogService', () => {
                 stock: faker.number.int({ min: 1, max: 100 }),
             })
             const service = new CatalogService(repository)
-            const result = await service.createProduct(mockData)
+            const result = await service.createProduct(mockData, logger)
             expect(result.statusCode).toEqual(20100)
 
         })
@@ -65,7 +86,7 @@ describe('catalogService', () => {
             jest.spyOn(repository, 'update').mockImplementationOnce(() => Promise.resolve(reqBody))
 
             const service = new CatalogService(repository)
-            const result = await service.update(reqBody)
+            const result = await service.update(reqBody, logger)
             expect(result.statusCode).toEqual(20000)
         })
     })
@@ -81,7 +102,7 @@ describe('catalogService', () => {
             jest.spyOn(repository, 'findAll').mockImplementationOnce(() => Promise.resolve({ total: reqBody.limit, data: products }))
 
             const service = new CatalogService(repository)
-            const result = await service.findAll(reqBody)
+            const result = await service.findAll(reqBody, logger)
             expect(result.data?.length).toEqual(reqBody.limit)
         })
     })
@@ -96,7 +117,7 @@ describe('catalogService', () => {
             jest.spyOn(repository, 'findById').mockImplementationOnce(() => Promise.resolve(product))
 
             const service = new CatalogService(repository)
-            const result = await service.findById(reqBody.id)
+            const result = await service.findById(reqBody.id, logger)
             expect(result.statusCode).toBe(20000)
 
         })
@@ -109,7 +130,7 @@ describe('catalogService', () => {
             jest.spyOn(repository, 'findById').mockImplementationOnce(() => Promise.reject(new Error('product not found')))
 
             const service = new CatalogService(repository)
-            await expect(service.findById(reqBody.id)).rejects.toThrow('product not found')
+            await expect(service.findById(reqBody.id, logger)).rejects.toThrow('product not found')
         })
     })
 
@@ -122,7 +143,7 @@ describe('catalogService', () => {
             jest.spyOn(repository, 'delete').mockImplementationOnce(() => Promise.resolve(true))
 
             const service = new CatalogService(repository)
-            const result = await service.delete(reqBody.id)
+            const result = await service.delete(reqBody.id, logger)
             expect(result.statusCode).toEqual(20000)
         })
 
@@ -134,7 +155,7 @@ describe('catalogService', () => {
             jest.spyOn(repository, 'delete').mockImplementationOnce(() => Promise.reject(new Error('product not found')))
 
             const service = new CatalogService(repository)
-            await expect(service.delete(reqBody.id)).rejects.toThrow('product not found')
+            await expect(service.delete(reqBody.id, logger)).rejects.toThrow('product not found')
         })
     })
 

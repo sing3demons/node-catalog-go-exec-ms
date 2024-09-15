@@ -1,4 +1,5 @@
 import { connect, disconnect } from "./db";
+import { logger } from "./logger";
 import app from "./server";
 
 const port = process.env.PORT || 8000;
@@ -6,7 +7,7 @@ const port = process.env.PORT || 8000;
 export const StartServer = async () => {
     await connect();
     app.listen(port, () => {
-        console.log(`Server is running on port ${port}`);
+        logger.info(`Server is running on port ${port}`);
     });
 
     process.on('unhandledRejection', (reason, promise) => {
@@ -20,18 +21,18 @@ export const StartServer = async () => {
     });
 
     process.on('SIGINT', async () => {
-        console.log('Received SIGINT. Shutting down');
+        logger.info('Received SIGINT. Shutting down');
         await disconnect();
         process.exit(0);
     });
 
     process.on('SIGTERM', async () => {
-        console.log('Received SIGTERM. Shutting down');
+        logger.info('Received SIGTERM. Shutting down');
         await disconnect();
         process.exit(0);
     });
 }
 
 StartServer().then(() => {
-    console.log('Server started successfully');
+    logger.info('Server started successfully');
 })

@@ -1,31 +1,35 @@
 import { ICatalogRepository } from "../interface/catalog.repository.interface";
 import { Product } from "../models/product.model";
-import prisma, { TPrismaClient } from "../db";
+import Prisma, { TPrismaClient } from "../db";
+import type { HttpLogger } from "../logger";
 
 
 export class CatalogRepository implements ICatalogRepository {
-    constructor(private readonly _prisma: TPrismaClient = prisma) { }
+    constructor(private readonly _prisma: TPrismaClient = Prisma()) { }
 
-    private query = () => {
+    private query = (logger: HttpLogger) => {
         this._prisma.$on('query', (e) => {
-            console.log(JSON.stringify({
+            const query = {
                 query: e.query.replace(/"/g, `'`),
                 params: e.params.replace(/"/g, `'`),
                 duration: `${e.duration} ms`,
                 target: e.target
-            }, null, 2))
+            }
+            logger.info(query)
+
         })
+
         return this._prisma
     }
 
-    async create(product: Product): Promise<Product> {
+    async create(product: Product, logger: HttpLogger): Promise<Product> {
         try {
             const data = {
                 ...product,
                 createBy: 'admin',
                 updateBy: 'admin',
             }
-            return await this.query().product.create({
+            return await this.query(logger).product.create({
                 data,
                 select: {
                     id: true,
@@ -41,14 +45,16 @@ export class CatalogRepository implements ICatalogRepository {
         }
     }
 
-    async update(product: Product): Promise<Product> {
-        const productExist = await this.query().product.findUnique({
+    async update(product: Product, logger: HttpLogger): Promise<Product | null> {
+        const productExist = await this.query(logger).product.findUnique({
             where: { id: product.id, deleted: false }
         })
 
-        if (!productExist) { throw new Error('Product not found') }
+        if (!productExist) {
+            return null
+        }
 
-        const result = await this.query().product.update({
+        const result = await this.query(logger).product.update({
             where: { id: product.id, deleted: false },
             data: {
                 name: product.name,
@@ -71,8 +77,8 @@ export class CatalogRepository implements ICatalogRepository {
         return result as Product;
     }
 
-    async delete(id: string): Promise<boolean> {
-        const result = await this.query().product.update({
+    async delete(id: string, logger: HttpLogger): Promise<boolean> {
+        const result = await this.query(logger).product.update({
             where: { id, deleted: false },
             data: {
                 deleted: true,
@@ -85,15 +91,15 @@ export class CatalogRepository implements ICatalogRepository {
         return true
     }
 
-    async findAll({ limit, offset }: { limit: number, offset: number }): Promise<{ total: number, data: Product[] }> {
+    async findAll({ limit, offset }: { limit: number, offset: number }, logger: HttpLogger): Promise<{ total: number, data: Product[] }> {
         try {
-            const [result, total] = await this.query().$transaction([
-                this.query().product.findMany({
+            const [result, total] = await this.query(logger).$transaction([
+                this._prisma.product.findMany({
                     take: limit,
                     skip: offset,
                     where: { deleted: false },
                 }),
-                this.query().product.count({ where: { deleted: false } })
+                this._prisma.product.count({ where: { deleted: false } })
             ])
 
             return {
@@ -108,9 +114,9 @@ export class CatalogRepository implements ICatalogRepository {
         }
     }
 
-    async findById(id: string): Promise<Product> {
+    async findById(id: string, logger: HttpLogger): Promise<Product> {
         try {
-            return await this.query().product.findUnique({
+            return await this.query(logger).product.findUnique({
                 where: { id, deleted: false },
                 select: {
                     id: true,
