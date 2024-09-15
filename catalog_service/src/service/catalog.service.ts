@@ -60,7 +60,7 @@ export class CatalogService {
             data: data.map((product) => {
                 return {
                     id: product.id,
-                    href: `${this.CATALOG_BASE_URL}/api/product/${product.id}`,
+                    href: `${this.CATALOG_BASE_URL}/product/${product.id}`,
                     name: product.name,
                     description: product.description,
                     price: product.price,
