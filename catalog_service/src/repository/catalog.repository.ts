@@ -15,7 +15,7 @@ export class CatalogRepository implements ICatalogRepository {
                 duration: `${e.duration} ms`,
                 target: e.target
             }
-            logger.info(query)
+            logger.write(query)
 
         })
 

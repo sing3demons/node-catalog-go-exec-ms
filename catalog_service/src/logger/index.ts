@@ -1,16 +1,39 @@
-import { pinoHttp } from "pino-http";
 import pino from "pino";
-import { Request } from "express";
+import type { Request } from "express";
+import { pinoHttp } from "pino-http";
+import path from "path";
+import dayjs from "dayjs";
+
+const transport = pino.transport({
+    target: 'pino/file',
+    options: {
+        mkdir: true,
+        append: true,
+        destination: path.join(process.cwd(), `logs`, `catalog-service-${dayjs().format('YYYY-MM-DD')}.log`),
+        interval: '5s',
+        compress: 'gzip',
+        size: '10MB',
+
+    },
+})
+
+const _logger = pino(transport)
 
 export const logger = pino({
-    level: "info",
     base: {
         serviceName: "catalog-service",
+    }, redact: ['access_token', 'secret_token', 'password', 'stores[*].access_token'],
+    formatters: {
+        bindings: ({ pid, hostname, }) => ({
+            pid: pid, host: hostname, node_version: process.version,
+        })
     },
     serializers: pino.stdSerializers,
     timestamp: () => `,"@timestamp":"${new Date(Date.now()).toISOString()}"`,
 
+
 })
+export const httpLogger = pinoHttp({ logger })
 
 export interface ILogger {
     info: (obj: object, msg?: string) => void;
@@ -20,9 +43,13 @@ export interface ILogger {
 
 export class HttpLogger {
     private readonly _logger: pino.Logger
+    private readonly _transactionId: any
 
     constructor(req: Request) {
-        this._logger = logger.child({ transactionId: req.headers['x-transaction-id'] })
+        this._transactionId = req.headers['x-transaction-id']
+        this._logger = logger.child({
+            transactionId: this._transactionId,
+        })
     }
     info(obj: unknown, msg?: string, ...args: any[]) {
         this._logger.info(obj, msg, ...args)
@@ -34,6 +61,13 @@ export class HttpLogger {
         return this
     }
 
+    write(obj: unknown, msg?: string, ...args: any[]) {
+        _logger.child({
+            transactionId: this._transactionId
+        }).info(obj, msg, ...args)
+        return this
+    }
+
 
 
     flush() {
@@ -41,10 +75,5 @@ export class HttpLogger {
     }
 }
 
-export const httpLogger = (req: Request) => {
-    console.log(`Request received with transaction id: ${req.headers['x-transaction-id']}`)
-
-    return logger.child({ transactionId: req.headers['x-transaction-id'] })
-}
 
 

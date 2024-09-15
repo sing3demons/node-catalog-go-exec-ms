@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import catalogRoute from './routes/catalog.route';
 import { v7 as uuid } from 'uuid'
+import { httpLogger } from './logger';
 
 const app = express()
 const transaction = 'x-transaction-id'
@@ -12,6 +13,7 @@ app.use((req, _res, next) => {
     }
     next()
 })
+app.use(httpLogger)
 
 app.use('/api', catalogRoute)
 app.use((req, res) => {
