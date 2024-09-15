@@ -1,16 +1,11 @@
 import request from 'supertest';
 import { Factory } from 'rosie'
-import express from 'express';
-import catalogRoute from '../catalog.route';
-import { da, de, faker } from '@faker-js/faker';
+import { faker } from '@faker-js/faker';
 import { CatalogService } from '../../service/catalog.service';
 import { CatalogRepository } from '../../repository/catalog.repository';
 import { Product } from '../../models/product.model';
+import app from '../../server';
 
-const app = express()
-
-app.use(express.json())
-app.use(catalogRoute)
 const productFactory = new Factory<Product>()
     .attr('id', faker.string.uuid())
     .attr('name', faker.commerce.productName())
@@ -44,7 +39,7 @@ describe('Catalog Route', () => {
                 .mockImplementationOnce(() => Promise.resolve({ err: false, data: product }))
 
             const response = await request(app)
-                .post('/product')
+                .post('/api/product')
                 .send(requestBody)
                 .set('Accept', 'application/json')
 
@@ -68,7 +63,7 @@ describe('Catalog Route', () => {
             const requestBody = mockRequest()
 
             const response = await request(app)
-                .post('/product')
+                .post('/api/product')
                 .send({
                     ...requestBody,
                     name: null
@@ -118,7 +113,7 @@ describe('Catalog Route', () => {
             }
 
             const response = await request(app)
-                .patch(`/product/${product.id}`)
+                .patch(`/api/product/${product.id}`)
                 .send(requestBody)
                 .set('Accept', 'application/json')
 

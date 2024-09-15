@@ -4,8 +4,8 @@ import { Product } from "../models/product.model";
 import { BaseResponse } from "../my-router";
 
 export class CatalogService {
-    constructor(private readonly repository: ICatalogRepository) {
-    }
+    constructor(private readonly repository: ICatalogRepository) { }
+    private CATALOG_BASE_URL = process.env.CATALOG_BASE_URL || ''
 
     async createProduct(product: Product, logger: HttpLogger): Promise<BaseResponse> {
         const response: BaseResponse = {}
@@ -60,7 +60,7 @@ export class CatalogService {
             data: data.map((product) => {
                 return {
                     id: product.id,
-                    href: `http://localhost:8000/api/product/${product.id}`,
+                    href: `${this.CATALOG_BASE_URL}/api/product/${product.id}`,
                     name: product.name,
                     description: product.description,
                     price: product.price,
@@ -86,7 +86,7 @@ export class CatalogService {
 
         response.data = {
             id: data.id,
-            href: `/product/${data.id}`,
+            href: `${this.CATALOG_BASE_URL}/product/${data.id}`,
             name: data.name,
             description: data.description,
             price: data.price,
