@@ -31,13 +31,13 @@ type P struct {
 }
 
 type ProductResponse struct {
-	ID          string  `json:"id"`
+	ID          string  `json:"ID"`
 	Href        string  `json:"href"`
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Price       float64 `json:"price"`
-	Image       string  `json:"image"`
-	Stock       int     `json:"stock"`
+	Name        string  `json:"Name"`
+	Description string  `json:"Description"`
+	Price       float64 `json:"Price"`
+	Image       string  `json:"Image"`
+	Stock       int     `json:"Stock"`
 }
 
 type ApiResponse struct {
@@ -88,7 +88,7 @@ func main() {
 
 	options := xlsx.XlsxOptions{
 		FileName: "Book1.xlsx",
-		// Headers:  []string{"NO", "Name", "Status", "Message"},
+		Headers:  []string{"ID", "Name", "Description", "Price", "Image", "Stock"},
 	}
 
 	if len(apiResponse.Data) > 0 {
