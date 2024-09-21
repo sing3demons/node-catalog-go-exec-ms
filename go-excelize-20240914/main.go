@@ -3,11 +3,14 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -67,15 +70,35 @@ func init() {
 		}
 		defer os.Remove(temp)
 	}
+
+	ict, err := time.LoadLocation("Asia/Bangkok")
+	if err != nil {
+		panic(err)
+	}
+
+	time.Local = ict
 }
 
 func main() {
 	logger := logger.New()
 	logger.Info("Starting the application...")
 
+	apiResponseProduct, _ := httpService.HttpGetClient[ApiResponse](&httpService.Options{
+		URL:     "http://localhost:8000/api/product",
+		Timeout: 10,
+		Param: url.Values{
+			"limit":  []string{"100"},
+			"offset": []string{"0"},
+		},
+	})
+
+	idList := []string{}
+	for _, v := range apiResponseProduct.Data {
+		idList = append(idList, v.ID)
+	}
+
 	r := http.NewServeMux()
 
-	
 	r.HandleFunc("POST /upload", func(w http.ResponseWriter, r *http.Request) {
 		r.ParseMultipartForm(128 * 1024)
 		file, fileHeader, err := r.FormFile("file")
@@ -113,6 +136,79 @@ func main() {
 		json.NewEncoder(w).Encode(apiResponse)
 	})
 
+	r.HandleFunc("GET /product", func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		var wg sync.WaitGroup
+		responseCh := make(chan any, len(idList))
+		poolSize := 20
+		semaphore := make(chan struct{}, poolSize)
+		var products []any
+		for _, id := range idList {
+			wg.Add(1)
+			go func(id string) {
+				defer wg.Done()
+				semaphore <- struct{}{}
+				defer func() { <-semaphore }()
+				product, err := httpService.HttpGetClient[any](&httpService.Options{
+					URL:     fmt.Sprintf("http://localhost:8000/api/product/%s", id),
+					Timeout: 60,
+				})
+				if err != nil {
+					fmt.Println("Error on getting product", err)
+					return
+				}
+
+				responseCh <- product
+
+			}(id)
+		}
+
+		go func() {
+			wg.Wait()
+			close(responseCh)
+		}()
+		for data := range responseCh {
+			products = append(products, data)
+		}
+		response := map[string]any{
+			"durations": fmt.Sprintf("%.2f ms", float64(time.Since(start).Milliseconds())/1000.0),
+			"products":  products,
+			"status":    "success",
+			"total":     len(products),
+		}
+
+		json.NewEncoder(w).Encode(response)
+	})
+
+	r.HandleFunc("GET /products", func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		var products []any
+		for _, id := range idList {
+			apiResponse, err := httpService.HttpGetClient[any](&httpService.Options{
+				URL:     fmt.Sprintf("http://localhost:8000/api/product/%s", id),
+				Timeout: 10,
+			})
+
+			if err != nil {
+				logger.Error("Error fetching product.")
+				w.Write([]byte("Error fetching product."))
+				return
+			}
+			products = append(products, apiResponse)
+
+		}
+		response := map[string]any{
+			"durations": fmt.Sprintf("%.2f ms", float64(time.Since(start).Milliseconds())/1000.0),
+			"products":  products,
+			"status":    "success",
+			"total":     len(products),
+		}
+
+		// set json content type
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
+	})
 	var wait time.Duration
 	srv := &http.Server{
 		Addr:         ":8080",
@@ -137,14 +233,6 @@ func main() {
 		log.Fatal("server forced to shutdown: ", err)
 	}
 	log.Println("server exiting")
-	// apiResponse, err := http_service.HttpGetClient[ApiResponse](&http_service.Options{
-	// 	URL:     "http://localhost:8000/api/product",
-	// 	Timeout: 10,
-	// 	Param: url.Values{
-	// 		"limit":  []string{"100"},
-	// 		"offset": []string{"0"},
-	// 	},
-	// })
 
 	// // apiResponse, err := http_service.HttpPostClient[ApiResponse]("http://localhost:8000/api/upload")
 
