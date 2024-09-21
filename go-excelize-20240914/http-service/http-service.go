@@ -205,79 +205,80 @@ type OptionPostForm struct {
 	Timeout   time.Duration
 	FormFiles []FormFile
 	Fields    FormFields
+	Headers   map[string]string
 }
 
-func HttpPostForm[TResponse any](url string, opt OptionPostForm) (*TResponse, error) {
-	payload := new(bytes.Buffer)
-	writer := multipart.NewWriter(payload)
-	for _, formFile := range opt.FormFiles {
-		name := formFile.Name
-		if name == "" {
-			name = "file"
-		}
-		part, err := writer.CreateFormFile(name, formFile.FileHeader.Filename)
-		if err != nil {
-			return nil, err
-		}
-		_, err = io.Copy(part, formFile.File)
-		if err != nil {
-			return nil, err
-		}
-		defer formFile.File.Close()
-	}
-
-	for key, value := range opt.Fields {
-		fmt.Println("key: ", key, "value: ", value)
-		if err := writer.WriteField(key, value); err != nil {
-			fmt.Println("Error writing field.")
-			return nil, err
-		}
-	}
-	fmt.Println("Fields: ", opt.Fields)
-
-	if err := writer.Close(); err != nil {
-		fmt.Println("Error closing writer.", err)
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, url, payload)
+func HttpPostForm[TResponse any](opt OptionPostForm) (result *TResponse, err error) {
+	payload, writer, err := createMultipartPayload(opt)
 	if err != nil {
-		fmt.Println("Error creating request.")
 		return nil, err
 	}
 
-	req.Header.Set(keyContentType, writer.FormDataContentType())
+	req, err := http.NewRequest(http.MethodPost, opt.URL, payload)
+	if err != nil {
+		log.Println("Error creating request.", err)
+		return nil, err
+	}
 
+	fmt.Println("Headers: ", opt.Headers)
+
+	for key, value := range opt.Headers {
+		fmt.Println("Key: ", key, "Value: ", value)
+		req.Header.Set(key, value)
+	}
+	req.Header.Set(keyContentType, writer.FormDataContentType())
 	if opt.Timeout == 0 {
 		opt.Timeout = 60
 	}
-
-	client := &http.Client{
-		Timeout: opt.Timeout * time.Second,
-	}
-
+	client := &http.Client{Timeout: opt.Timeout * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Error doing the request.")
+		log.Println("Error sending request.", err)
 		return nil, err
 	}
-
 	defer resp.Body.Close()
-
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("Error reading the response body.")
+		log.Println("Error reading response.", err)
 		return nil, err
 	}
-	fmt.Println("===============>")
-
-	var result TResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		fmt.Printf("Error unmarshaling response: %v", err)
+		log.Println("Error unmarshaling response.", err)
 		return nil, err
 	}
+	return result, nil
+}
 
-	return &result, nil
+func createMultipartPayload(opt OptionPostForm) (*bytes.Buffer, *multipart.Writer, error) {
+	payload := new(bytes.Buffer)
+	writer := multipart.NewWriter(payload)
+	for _, formFile := range opt.FormFiles {
+		if formFile.Name == "" {
+			formFile.Name = "file"
+		}
+		part, err := writer.CreateFormFile(formFile.Name, formFile.FileHeader.Filename)
+		if err != nil {
+			log.Println("Error creating form file.", err)
+			return nil, nil, err
+		}
+		_, err = io.Copy(part, formFile.File)
+		if err != nil {
+			log.Println("Error copying file.", err)
+			return nil, nil, err
+		}
+		defer formFile.File.Close()
+	}
+	for key, value := range opt.Fields {
+		if err := writer.WriteField(key, value); err != nil {
+			log.Println("Error writing field.", err)
+			return nil, nil, err
+		}
+	}
+	if err := writer.Close(); err != nil {
+		log.Println("Error closing writer.", err)
+		return nil, nil, err
+	}
+	return payload, writer, nil
 }
 
 func MakeHTTPRequest[T any](fullUrl string, httpMethod string, headers map[string]string, queryParameters url.Values, body io.Reader) (*T, error) {

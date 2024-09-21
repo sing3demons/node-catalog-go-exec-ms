@@ -7,7 +7,7 @@ import (
 	"runtime"
 
 	"github.com/joho/godotenv"
-	http_service "github.com/sing3demons/20240914/excelize/http-service"
+	httpService "github.com/sing3demons/20240914/excelize/http-service"
 	"github.com/sing3demons/20240914/excelize/logger"
 )
 
@@ -68,7 +68,6 @@ func main() {
 	logger.Info("Starting the application...")
 
 	http.HandleFunc("POST /upload", func(w http.ResponseWriter, r *http.Request) {
-		logger.Info("Upload file endpoint hit.")
 		r.ParseMultipartForm(128 * 1024)
 		file, fileHeader, err := r.FormFile("file")
 		if err != nil {
@@ -78,20 +77,19 @@ func main() {
 		}
 		defer file.Close()
 
-		opt := http_service.OptionPostForm{
-			FormFiles: []http_service.FormFile{
-				{
-					File:       file,
-					FileHeader: fileHeader,
+		apiResponse, err := httpService.HttpPostForm[any](
+			httpService.OptionPostForm{
+				URL: "http://localhost:8000/api/upload",
+				FormFiles: []httpService.FormFile{
+					{
+						File:       file,
+						FileHeader: fileHeader,
+					},
+				},
+				Fields: map[string]string{
+					"replaceFileName": r.FormValue("name"),
 				},
 			},
-			Fields: map[string]string{
-				"replaceFileName": r.FormValue("name"),
-			},
-		}
-		apiResponse, err := http_service.HttpPostForm[any](
-			"http://localhost:8000/api/upload",
-			opt,
 		)
 
 		if err != nil {
@@ -104,72 +102,6 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(apiResponse)
-
-		// payload := new(bytes.Buffer)
-		// writer := multipart.NewWriter(payload)
-
-		// part, err := writer.CreateFormFile("file", fileHeader.Filename)
-		// if err != nil {
-		// 	w.WriteHeader(http.StatusInternalServerError)
-		// 	w.Write([]byte("Error creating form file"))
-		// 	return
-		// }
-
-		// // Copy the file to the multipart form writer
-		// _, err = io.Copy(part, file)
-		// if err != nil {
-		// 	w.WriteHeader(http.StatusInternalServerError)
-		// 	w.Write([]byte("Error copying file"))
-		// 	return
-		// }
-
-		// // replaceFileName
-		// replaceFileName := r.FormValue("name")
-		// if replaceFileName != "" {
-
-		// 	writer.WriteField("replaceFileName", replaceFileName)
-		// }
-
-		// // Close the writer to finalize the multipart form
-		// err = writer.Close()
-		// if err != nil {
-		// 	w.WriteHeader(http.StatusInternalServerError)
-		// 	w.Write([]byte("Error closing form"))
-		// 	return
-		// }
-		// req, err := http.NewRequest(http.MethodPost, "http://localhost:8000/api/upload", payload)
-		// if err != nil {
-		// 	logger.Error("Error creating request.")
-		// 	w.Write([]byte("Error creating request."))
-		// 	return
-		// }
-
-		// req.Header.Set("Content-Type", writer.FormDataContentType())
-
-		// client := &http.Client{
-		// 	Timeout: 60 * time.Second,
-		// }
-
-		// resp, err := client.Do(req)
-		// if err != nil {
-		// 	logger.Error("Error uploading the file.")
-		// 	w.Write([]byte("Error uploading the file."))
-		// 	return
-		// }
-
-		// defer resp.Body.Close()
-
-		// respBody, err := io.ReadAll(resp.Body)
-		// if err != nil {
-		// 	logger.Error("Error reading the response body.")
-		// 	w.Write([]byte("Error reading the response body."))
-		// 	return
-		// }
-
-		// set json content type
-		// w.Header().Set("Content-Type", "application/json")
-		// w.WriteHeader(resp.StatusCode)
-		// w.Write(respBody)
 	})
 
 	http.ListenAndServe(":8080", nil)

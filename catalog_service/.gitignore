@@ -133,3 +133,4 @@ dist
 coverage
 db-data
 public
+migrations
