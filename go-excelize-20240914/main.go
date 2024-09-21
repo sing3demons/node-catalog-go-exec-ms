@@ -1,14 +1,20 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"runtime"
+	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 	httpService "github.com/sing3demons/20240914/excelize/http-service"
 	"github.com/sing3demons/20240914/excelize/logger"
+	"github.com/sing3demons/20240914/excelize/mlog"
 )
 
 type Data struct {
@@ -67,7 +73,10 @@ func main() {
 	logger := logger.New()
 	logger.Info("Starting the application...")
 
-	http.HandleFunc("POST /upload", func(w http.ResponseWriter, r *http.Request) {
+	r := http.NewServeMux()
+
+	
+	r.HandleFunc("POST /upload", func(w http.ResponseWriter, r *http.Request) {
 		r.ParseMultipartForm(128 * 1024)
 		file, fileHeader, err := r.FormFile("file")
 		if err != nil {
@@ -104,8 +113,30 @@ func main() {
 		json.NewEncoder(w).Encode(apiResponse)
 	})
 
-	http.ListenAndServe(":8080", nil)
+	var wait time.Duration
+	srv := &http.Server{
+		Addr:         ":8080",
+		Handler:      mlog.M(r, logger),
+		ReadTimeout:  60 * time.Second,
+		WriteTimeout: 60 * time.Second,
+	}
 
+	go func() {
+		if err := srv.ListenAndServe(); err != nil {
+			log.Fatalf("error starting server, %s", err)
+		}
+	}()
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatal("server forced to shutdown: ", err)
+	}
+	log.Println("server exiting")
 	// apiResponse, err := http_service.HttpGetClient[ApiResponse](&http_service.Options{
 	// 	URL:     "http://localhost:8000/api/product",
 	// 	Timeout: 10,

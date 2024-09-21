@@ -3,6 +3,7 @@ package mlog
 import (
 	"context"
 	"log/slog"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -52,4 +53,24 @@ func Middleware(logger *slog.Logger) gin.HandlerFunc {
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	}
+}
+
+func M(handler http.Handler, logger *slog.Logger) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session := r.Header.Get("x-request-id")
+		if session == "" {
+			xSession := r.Header.Get(string(sessionKey))
+			if xSession != "" {
+				session = xSession
+			} else {
+				session = uuid.New().String()
+			}
+		}
+
+		ctx := context.WithValue(r.Context(), sessionKey, session)
+		l := logMiddleware(ctx, logger)
+		ctx = context.WithValue(ctx, loggerKey, l)
+		r = r.WithContext(ctx)
+		handler.ServeHTTP(w, r)
+	})
 }

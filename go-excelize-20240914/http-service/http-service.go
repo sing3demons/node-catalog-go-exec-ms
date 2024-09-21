@@ -219,9 +219,6 @@ func HttpPostForm[TResponse any](opt OptionPostForm) (result *TResponse, err err
 		log.Println("Error creating request.", err)
 		return nil, err
 	}
-
-	fmt.Println("Headers: ", opt.Headers)
-
 	for key, value := range opt.Headers {
 		fmt.Println("Key: ", key, "Value: ", value)
 		req.Header.Set(key, value)
