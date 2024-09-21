@@ -1,4 +1,4 @@
-import { t } from "../my-router";
+import { t } from "../my-router"
 
 export class Product {
     constructor(

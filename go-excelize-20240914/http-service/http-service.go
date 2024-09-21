@@ -1,10 +1,12 @@
-package httpservice
+package http_service
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strings"
@@ -187,6 +189,94 @@ func HttpPostClient[TResponse any, TBody map[string]any](url string, payload TBo
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, err
 	}
+	return &result, nil
+}
+
+type FormFile struct {
+	Name       string
+	File       multipart.File
+	FileHeader *multipart.FileHeader
+}
+
+type FormFields map[string]string
+
+type OptionPostForm struct {
+	URL       string
+	Timeout   time.Duration
+	FormFiles []FormFile
+	Fields    FormFields
+}
+
+func HttpPostForm[TResponse any](url string, opt OptionPostForm) (*TResponse, error) {
+	payload := new(bytes.Buffer)
+	writer := multipart.NewWriter(payload)
+	for _, formFile := range opt.FormFiles {
+		name := formFile.Name
+		if name == "" {
+			name = "file"
+		}
+		part, err := writer.CreateFormFile(name, formFile.FileHeader.Filename)
+		if err != nil {
+			return nil, err
+		}
+		_, err = io.Copy(part, formFile.File)
+		if err != nil {
+			return nil, err
+		}
+		defer formFile.File.Close()
+	}
+
+	for key, value := range opt.Fields {
+		fmt.Println("key: ", key, "value: ", value)
+		if err := writer.WriteField(key, value); err != nil {
+			fmt.Println("Error writing field.")
+			return nil, err
+		}
+	}
+	fmt.Println("Fields: ", opt.Fields)
+
+	if err := writer.Close(); err != nil {
+		fmt.Println("Error closing writer.", err)
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, url, payload)
+	if err != nil {
+		fmt.Println("Error creating request.")
+		return nil, err
+	}
+
+	req.Header.Set(keyContentType, writer.FormDataContentType())
+
+	if opt.Timeout == 0 {
+		opt.Timeout = 60
+	}
+
+	client := &http.Client{
+		Timeout: opt.Timeout * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error doing the request.")
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Error reading the response body.")
+		return nil, err
+	}
+	fmt.Println("===============>")
+
+	var result TResponse
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		fmt.Printf("Error unmarshaling response: %v", err)
+		return nil, err
+	}
+
 	return &result, nil
 }
 
