@@ -140,6 +140,68 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(apiResponse)
 }
 
+func GetProductMulti(r *http.Request, idList []string) []ProductResponse {
+	l := mlog.L(r.Context())
+
+	const poolSize = 100   // Number of concurrent workers
+	const batchSize = 1000 // Process requests in batches to avoid overwhelming system resources
+
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, poolSize)
+	responseCh := make(chan ProductResponse, batchSize)
+	var products []ProductResponse
+
+	// Function to process a batch of requests
+	processBatch := func(batch []string) {
+		for _, id := range batch {
+			wg.Add(1)
+			go func(id string) {
+				defer wg.Done()
+				semaphore <- struct{}{} // Limit concurrency
+				defer func() { <-semaphore }()
+
+				// HTTP request to fetch product data
+				product, err := httpService.HttpGetClient[TProductResponse](&httpService.Options{
+					URL:     fmt.Sprintf("http://localhost:8000/api/product/%s", id),
+					Timeout: 60,
+				})
+				if err != nil {
+					l.Error("Error fetching product", "id", id, "error", err)
+					return
+				}
+
+				// Log product response
+				l.Info("Received product", "id", id, "product", product)
+
+				// Send product response to channel
+				responseCh <- product.Data.Data
+			}(id)
+		}
+	}
+
+	// Batch processing to limit memory consumption
+	for i := 0; i < len(idList); i += batchSize {
+		fmt.Println("Processing batch =============> ", i)
+		end := i + batchSize
+		if end > len(idList) {
+			end = len(idList)
+		}
+		processBatch(idList[i:end])
+	}
+
+	// Wait for all goroutines to finish and close the channel
+	go func() {
+		wg.Wait()
+		close(responseCh)
+	}()
+
+	// Collect product responses
+	for data := range responseCh {
+		products = append(products, data)
+	}
+	return products
+}
+
 func main() {
 	logger := logger.New()
 	logger.Info("Starting the application...")
@@ -151,67 +213,8 @@ func main() {
 	r.HandleFunc("POST /upload", UploadFile)
 
 	r.HandleFunc("GET /product", func(w http.ResponseWriter, r *http.Request) {
-		l := mlog.L(r.Context())
 		start := time.Now().UnixMilli()
-
-		const poolSize = 100   // Number of concurrent workers
-		const batchSize = 1000 // Process requests in batches to avoid overwhelming system resources
-
-		var wg sync.WaitGroup
-		semaphore := make(chan struct{}, poolSize)
-		responseCh := make(chan ProductResponse, batchSize)
-		var products []ProductResponse
-
-		// Function to process a batch of requests
-		processBatch := func(batch []string) {
-			for _, id := range batch {
-				wg.Add(1)
-				go func(id string) {
-					defer wg.Done()
-					semaphore <- struct{}{} // Limit concurrency
-					defer func() { <-semaphore }()
-
-					// HTTP request to fetch product data
-					product, err := httpService.HttpGetClient[TProductResponse](&httpService.Options{
-						URL:     fmt.Sprintf("http://localhost:8000/api/product/%s", id),
-						Timeout: 60,
-					})
-					if err != nil {
-						l.Error("Error fetching product", "id", id, "error", err)
-						return
-					}
-
-					// Log product response
-					l.Info("Received product", "id", id, "product", product)
-
-					// Send product response to channel
-					responseCh <- product.Data.Data
-				}(id)
-			}
-		}
-
-		// Batch processing to limit memory consumption
-		for i := 0; i < len(idList); i += batchSize {
-			fmt.Println("Processing batch =============> ", i)
-			end := i + batchSize
-			if end > len(idList) {
-				end = len(idList)
-			}
-			processBatch(idList[i:end])
-		}
-
-		// Wait for all goroutines to finish and close the channel
-		go func() {
-			wg.Wait()
-			close(responseCh)
-		}()
-
-		// Collect product responses
-		for data := range responseCh {
-			products = append(products, data)
-		}
-
-		// Send response back to client
+		products := GetProductMulti(r, idList)
 		ResponseProducts(w, products, start)
 	})
 
@@ -308,7 +311,7 @@ func AsyncHTTP(users []string) ([]string, error) {
 			resp, err := http.Get("https://api.github.com/users/" + user)
 			if err != nil {
 				mu.Lock()
-				err = fmt.Errorf("error fetching user %s: %v", user, err)
+				fmt.Errorf("error fetching user %s: %v", user, err)
 				mu.Unlock()
 				return
 			}
@@ -316,7 +319,7 @@ func AsyncHTTP(users []string) ([]string, error) {
 			var data map[string]interface{}
 			if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 				mu.Lock()
-				err = fmt.Errorf("error decoding user %s: %v", user, err)
+				fmt.Errorf("error decoding user %s: %v", user, err)
 				mu.Unlock()
 				return
 			}
