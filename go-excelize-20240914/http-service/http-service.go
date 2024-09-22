@@ -92,106 +92,6 @@ type Options struct {
 	headers map[string]string
 }
 
-func HttpGetClient[TResponse any](opt *Options) (*TResponse, error) {
-	u, err := url.Parse(opt.URL)
-	if err != nil {
-		log.Printf("Error parsing URL %s: %v\n", opt.URL, err)
-		return nil, err
-	}
-
-	if opt.Param != nil {
-		q := u.Query()
-
-		for k, v := range opt.Param {
-			q.Set(k, strings.Join(v, ","))
-		}
-		u.RawQuery = q.Encode()
-	}
-
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
-	if err != nil {
-		log.Printf("Error creating request for URL %s: %v\n", opt.URL, err)
-		return nil, err
-	}
-
-	if opt.headers != nil {
-		for key, value := range opt.headers {
-			req.Header.Set(key, value)
-		}
-	} else {
-		req.Header.Set(keyContentType, contentTypeJSON)
-	}
-
-	if opt.Timeout == 0 {
-		opt.Timeout = 30
-	}
-
-	client := &http.Client{
-		Timeout: opt.Timeout * time.Second,
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("Error fetching URL %s: %v\n", opt.URL, err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Error reading response from URL %s: %v\n", opt.URL, err)
-		return nil, err
-	}
-
-	var result TResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		log.Printf("Error unmarshaling response: %v\n", err)
-		return nil, err
-	}
-
-	log.Println("Response: ", result)
-
-	return &result, nil
-}
-
-func HttpPostClient[TResponse any, TBody map[string]any](url string, payload TBody, opt Options) (*TResponse, error) {
-	jsonBody, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(string(jsonBody)))
-	if err != nil {
-		return nil, err
-	}
-
-	if opt.Timeout == 0 {
-		opt.Timeout = 30
-	}
-
-	req.Header.Set(keyContentType, contentTypeJSON)
-	client := &http.Client{
-		Timeout: opt.Timeout * time.Second,
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var result TResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
 type FormFile struct {
 	Name       string
 	File       multipart.File
@@ -208,40 +108,206 @@ type OptionPostForm struct {
 	Headers   map[string]string
 }
 
-func HttpPostForm[TResponse any](opt OptionPostForm) (result *TResponse, err error) {
+type HttpResponse[T any] struct {
+	StatusCode  int    `json:"statusCode"`
+	Message     string `json:"message"`
+	Description string `json:"description"`
+	Data        T      `json:"data"`
+}
+
+func HttpGetClient[TResponse any](opt *Options) (result HttpResponse[*TResponse], err error) {
+	result.StatusCode = http.StatusInternalServerError
+
+	u, err := url.Parse(opt.URL)
+	if err != nil {
+		return handleError(result, fmt.Sprintf("Error parsing URL %s: %v\n", opt.URL, err), err)
+	}
+
+	addQueryParams(u, opt.Param)
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return handleError(result, fmt.Sprintf("Error creating request for URL %s: %v\n", opt.URL, err), err)
+	}
+
+	setHeaders(req, opt.headers)
+
+	if opt.Timeout == 0 {
+		opt.Timeout = 30
+	}
+
+	client := &http.Client{
+		Timeout: opt.Timeout * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return handleError(result, fmt.Sprintf("Error fetching URL %s: %v\n", opt.URL, err), err)
+	}
+	defer resp.Body.Close()
+
+	return handleResponse(resp, result, opt.URL)
+}
+
+func handleError[TResponse any](result HttpResponse[*TResponse], message string, err error) (HttpResponse[*TResponse], error) {
+	log.Println(message, err)
+	result.Message = err.Error()
+	return result, err
+}
+
+func addQueryParams(u *url.URL, params url.Values) {
+	if params != nil {
+		q := u.Query()
+		for k, v := range params {
+			q.Set(k, strings.Join(v, ","))
+		}
+		u.RawQuery = q.Encode()
+	}
+}
+
+func setHeaders(req *http.Request, headers map[string]string, defaultContentType ...string) {
+	if len(defaultContentType) > 0 {
+		req.Header.Set(keyContentType, defaultContentType[0])
+
+	} else {
+		req.Header.Set(keyContentType, contentTypeJSON)
+	}
+
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+
+}
+
+func handleResponse[TResponse any](resp *http.Response, result HttpResponse[*TResponse], url string) (HttpResponse[*TResponse], error) {
+	result.StatusCode = resp.StatusCode
+	result.Message = resp.Status
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return handleError(result, fmt.Sprintf("Error reading response from URL %s: %v\n", url, err), err)
+	}
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		result.Description = "Success"
+	} else {
+		result.Description = string(respBody)
+	}
+
+	if err := json.Unmarshal(respBody, &result.Data); err != nil {
+		return handleError(result, fmt.Sprintf("Error unmarshaling response: %v\n", err), err)
+	}
+	return result, nil
+}
+
+func HttpPostClient[TResponse any, TBody map[string]any](url string, payload TBody, opt Options) (result HttpResponse[*TResponse], err error) {
+	result.StatusCode = http.StatusInternalServerError
+	jsonBody, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Error marshaling payload: %v\n", err)
+		result.Message = err.Error()
+		return result, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(string(jsonBody)))
+	if err != nil {
+		log.Printf("Error creating request for URL %s: %v\n", url, err)
+		result.Message = err.Error()
+		return result, err
+	}
+
+	if opt.Timeout == 0 {
+		opt.Timeout = 30
+	}
+
+	setHeaders(req, opt.headers)
+
+	client := &http.Client{
+		Timeout: opt.Timeout * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error sending request to URL %s: %v\n", url, err)
+		result.Message = err.Error()
+		return result, err
+	}
+	defer resp.Body.Close()
+	result.StatusCode = resp.StatusCode
+	result.Message = resp.Status
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Error reading response from URL %s: %v\n", url, err)
+		result.Message = err.Error()
+		return result, err
+	}
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		result.Description = "Success"
+	} else {
+		result.Description = string(body)
+	}
+
+	if err := json.Unmarshal(body, &result.Data); err != nil {
+		log.Printf("Error unmarshaling response: %v\n", err)
+		result.Message = err.Error()
+		result.Data = nil
+		return result, err
+	}
+	return result, nil
+}
+
+func HttpPostForm[TResponse any](opt OptionPostForm) (result HttpResponse[*TResponse], err error) {
 	payload, writer, err := createMultipartPayload(opt)
 	if err != nil {
-		return nil, err
+		result.StatusCode = http.StatusInternalServerError
+		result.Message = err.Error()
+		return result, err
 	}
 
 	req, err := http.NewRequest(http.MethodPost, opt.URL, payload)
 	if err != nil {
 		log.Println("Error creating request.", err)
-		return nil, err
+		result.StatusCode = http.StatusInternalServerError
+		result.Message = err.Error()
+		return result, err
 	}
-	for key, value := range opt.Headers {
-		fmt.Println("Key: ", key, "Value: ", value)
-		req.Header.Set(key, value)
-	}
-	req.Header.Set(keyContentType, writer.FormDataContentType())
+
+	setHeaders(req, opt.Headers, writer.FormDataContentType())
+
 	if opt.Timeout == 0 {
 		opt.Timeout = 60
 	}
 	client := &http.Client{Timeout: opt.Timeout * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		result.StatusCode = http.StatusInternalServerError
+		result.Message = err.Error()
 		log.Println("Error sending request.", err)
-		return nil, err
+		return result, err
 	}
 	defer resp.Body.Close()
+
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Println("Error reading response.", err)
-		return nil, err
+		result.StatusCode = http.StatusInternalServerError
+		result.Message = err.Error()
+		return result, err
 	}
-	if err := json.Unmarshal(respBody, &result); err != nil {
+
+	result.StatusCode = resp.StatusCode
+	result.Message = resp.Status
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		result.Description = "Success"
+	} else {
+		result.Description = string(respBody)
+	}
+
+	if err := json.Unmarshal(respBody, &result.Data); err != nil {
 		log.Println("Error unmarshaling response.", err)
-		return nil, err
+		result.Data = nil
+		return result, err
 	}
 	return result, nil
 }
@@ -276,69 +342,4 @@ func createMultipartPayload(opt OptionPostForm) (*bytes.Buffer, *multipart.Write
 		return nil, nil, err
 	}
 	return payload, writer, nil
-}
-
-func MakeHTTPRequest[T any](fullUrl string, httpMethod string, headers map[string]string, queryParameters url.Values, body io.Reader) (*T, error) {
-	client := http.Client{}
-	u, err := url.Parse(fullUrl)
-	if err != nil {
-		return nil, err
-	}
-
-	// if it's a GET, we need to append the query parameters.
-	if httpMethod == "GET" {
-		q := u.Query()
-
-		for k, v := range queryParameters {
-			// this depends on the type of api, you may need to do it for each of v
-			q.Set(k, strings.Join(v, ","))
-		}
-		// set the query to the encoded parameters
-		u.RawQuery = q.Encode()
-	}
-
-	// regardless of GET or POST, we can safely add the body
-	req, err := http.NewRequest(httpMethod, u.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	// for each header passed, add the header value to the request
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-
-	// optional: log the request for easier stack tracing
-	log.Printf("%s %s\n", httpMethod, req.URL.String())
-
-	// finally, do the request
-	res, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	if res == nil {
-		return nil, fmt.Errorf("error: calling %s returned empty response", u.String())
-	}
-
-	responseData, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("error calling %s:\nstatus: %s\nresponseData: %s", u.String(), res.Status, responseData)
-	}
-
-	var responseObject T
-	err = json.Unmarshal(responseData, &responseObject)
-
-	if err != nil {
-		log.Printf("error unmarshaling response: %+v", err)
-		return nil, err
-	}
-
-	return &responseObject, nil
 }

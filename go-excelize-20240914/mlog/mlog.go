@@ -55,7 +55,7 @@ func Middleware(logger *slog.Logger) gin.HandlerFunc {
 	}
 }
 
-func M(handler http.Handler, logger *slog.Logger) http.Handler {
+func MLog(handler http.Handler, logger *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		session := r.Header.Get("x-request-id")
 		if session == "" {

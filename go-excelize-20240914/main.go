@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,6 +19,7 @@ import (
 	httpService "github.com/sing3demons/20240914/excelize/http-service"
 	"github.com/sing3demons/20240914/excelize/logger"
 	"github.com/sing3demons/20240914/excelize/mlog"
+	"github.com/sing3demons/20240914/excelize/xlsx"
 )
 
 type Data struct {
@@ -79,10 +81,11 @@ func init() {
 	time.Local = ict
 }
 
-func main() {
-	logger := logger.New()
-	logger.Info("Starting the application...")
+type TProductResponse struct {
+	Data ProductResponse `json:"data"`
+}
 
+func loadProducts() []string {
 	apiResponseProduct, _ := httpService.HttpGetClient[ApiResponse](&httpService.Options{
 		URL:     "http://localhost:8000/api/product",
 		Timeout: 10,
@@ -93,72 +96,86 @@ func main() {
 	})
 
 	idList := []string{}
-	for _, v := range apiResponseProduct.Data {
+	for _, v := range apiResponseProduct.Data.Data {
 		idList = append(idList, v.ID)
 	}
+	return idList
+}
+
+func UploadFile(w http.ResponseWriter, r *http.Request) {
+	r.ParseMultipartForm(128 * 1024)
+	logger := mlog.L(r.Context())
+	file, fileHeader, err := r.FormFile("file")
+	if err != nil {
+		logger.Error("Error parsing the file.")
+		w.Write([]byte("Error parsing the file."))
+		return
+	}
+	defer file.Close()
+
+	apiResponse, err := httpService.HttpPostForm[any](
+		httpService.OptionPostForm{
+			URL: "http://localhost:8000/api/upload",
+			FormFiles: []httpService.FormFile{
+				{
+					File:       file,
+					FileHeader: fileHeader,
+				},
+			},
+			Fields: map[string]string{
+				"replaceFileName": r.FormValue("name"),
+			},
+		},
+	)
+
+	if err != nil {
+		logger.Error("Error uploading the file.")
+		w.Write([]byte("Error uploading the file."))
+		return
+	}
+
+	// set json content type
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(apiResponse)
+}
+
+func main() {
+	logger := logger.New()
+	logger.Info("Starting the application...")
+
+	idList := loadProducts()
 
 	r := http.NewServeMux()
 
-	r.HandleFunc("POST /upload", func(w http.ResponseWriter, r *http.Request) {
-		r.ParseMultipartForm(128 * 1024)
-		file, fileHeader, err := r.FormFile("file")
-		if err != nil {
-			logger.Error("Error parsing the file.")
-			w.Write([]byte("Error parsing the file."))
-			return
-		}
-		defer file.Close()
-
-		apiResponse, err := httpService.HttpPostForm[any](
-			httpService.OptionPostForm{
-				URL: "http://localhost:8000/api/upload",
-				FormFiles: []httpService.FormFile{
-					{
-						File:       file,
-						FileHeader: fileHeader,
-					},
-				},
-				Fields: map[string]string{
-					"replaceFileName": r.FormValue("name"),
-				},
-			},
-		)
-
-		if err != nil {
-			logger.Error("Error uploading the file.")
-			w.Write([]byte("Error uploading the file."))
-			return
-		}
-
-		// set json content type
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(apiResponse)
-	})
+	r.HandleFunc("POST /upload", UploadFile)
 
 	r.HandleFunc("GET /product", func(w http.ResponseWriter, r *http.Request) {
+		l := mlog.L(r.Context())
 		start := time.Now()
 		var wg sync.WaitGroup
-		responseCh := make(chan any, len(idList))
+		responseCh := make(chan ProductResponse, len(idList))
 		poolSize := 20
 		semaphore := make(chan struct{}, poolSize)
-		var products []any
+		var products []ProductResponse
 		for _, id := range idList {
 			wg.Add(1)
 			go func(id string) {
 				defer wg.Done()
 				semaphore <- struct{}{}
 				defer func() { <-semaphore }()
-				product, err := httpService.HttpGetClient[any](&httpService.Options{
+				product, err := httpService.HttpGetClient[TProductResponse](&httpService.Options{
 					URL:     fmt.Sprintf("http://localhost:8000/api/product/%s", id),
 					Timeout: 60,
 				})
 				if err != nil {
-					fmt.Println("Error on getting product", err)
+					log.Println("Error on getting product", err)
 					return
 				}
 
-				responseCh <- product
+				l.Info("Response", "product", product)
+
+				responseCh <- product.Data.Data
 
 			}(id)
 		}
@@ -176,15 +193,16 @@ func main() {
 			"status":    "success",
 			"total":     len(products),
 		}
-
+		SaveExcelFile(products)
 		json.NewEncoder(w).Encode(response)
 	})
 
 	r.HandleFunc("GET /products", func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		var products []any
+		var products []ProductResponse
+
 		for _, id := range idList {
-			apiResponse, err := httpService.HttpGetClient[any](&httpService.Options{
+			apiResponse, err := httpService.HttpGetClient[TProductResponse](&httpService.Options{
 				URL:     fmt.Sprintf("http://localhost:8000/api/product/%s", id),
 				Timeout: 10,
 			})
@@ -194,9 +212,9 @@ func main() {
 				w.Write([]byte("Error fetching product."))
 				return
 			}
-			products = append(products, apiResponse)
-
+			products = append(products, apiResponse.Data.Data)
 		}
+
 		response := map[string]any{
 			"durations": fmt.Sprintf("%.2f ms", float64(time.Since(start).Milliseconds())/1000.0),
 			"products":  products,
@@ -204,15 +222,21 @@ func main() {
 			"total":     len(products),
 		}
 
+		SaveExcelFile(products)
 		// set json content type
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(response)
 	})
+
+	StartHttp(r, logger)
+}
+
+func StartHttp(r *http.ServeMux, logger *slog.Logger) {
 	var wait time.Duration
 	srv := &http.Server{
 		Addr:         ":8080",
-		Handler:      mlog.M(r, logger),
+		Handler:      mlog.MLog(r, logger),
 		ReadTimeout:  60 * time.Second,
 		WriteTimeout: 60 * time.Second,
 	}
@@ -232,27 +256,52 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatal("server forced to shutdown: ", err)
 	}
-	log.Println("server exiting")
+	logger.Info("server exiting")
+}
 
-	// // apiResponse, err := http_service.HttpPostClient[ApiResponse]("http://localhost:8000/api/upload")
+func SaveExcelFile(products []ProductResponse) {
+	options := xlsx.XlsxOptions{
+		FileName: "Book1.xlsx",
+		Headers:  []string{"ID", "Name", "Description", "Price", "Image", "Stock"},
+	}
 
-	// if err != nil {
-	// 	log.Fatalf("Error fetching URL %s: %v", "http://localhost:8000/api/product", err)
-	// }
+	if len(products) > 0 {
+		f := xlsx.NewXlsx(products, options)
+		if err := f.SaveExcelFile(); err != nil {
+			fmt.Println("Error saving Excel file:", err)
+		}
+	}
+}
 
-	// logger.Info("Data fetched successfully.")
-
-	// options := xlsx.XlsxOptions{
-	// 	FileName: "Book1.xlsx",
-	// 	Headers:  []string{"ID", "Name", "Description", "Price", "Image", "Stock"},
-	// }
-
-	// if len(apiResponse.Data) > 0 {
-	// 	f := xlsx.NewXlsx(apiResponse.Data, options)
-
-	// 	if err := f.SaveExcelFile(); err != nil {
-	// 		fmt.Println("Error saving Excel file:", err)
-	// 	}
-	// }
-	// logger.Info("Excel file saved successfully.")
+func AsyncHTTP(users []string) ([]string, error) {
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var result []string
+	var err error
+	for _, user := range users {
+		wg.Add(1)
+		go func(user string) {
+			defer wg.Done()
+			resp, err := http.Get("https://api.github.com/users/" + user)
+			if err != nil {
+				mu.Lock()
+				err = fmt.Errorf("error fetching user %s: %v", user, err)
+				mu.Unlock()
+				return
+			}
+			defer resp.Body.Close()
+			var data map[string]interface{}
+			if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+				mu.Lock()
+				err = fmt.Errorf("error decoding user %s: %v", user, err)
+				mu.Unlock()
+				return
+			}
+			mu.Lock()
+			result = append(result, data["login"].(string))
+			mu.Unlock()
+		}(user)
+	}
+	wg.Wait()
+	return result, err
 }

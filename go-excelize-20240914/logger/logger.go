@@ -15,7 +15,7 @@ func New() *slog.Logger {
 				}
 				return a
 			},
-		})).With("serviceName", "auth-service")
+		})).With("serviceName", os.Getenv("SERVICE_NAME"))
 
 	slog.SetDefault(logger)
 
