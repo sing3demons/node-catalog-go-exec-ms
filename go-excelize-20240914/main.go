@@ -90,7 +90,7 @@ func loadProducts() []string {
 		URL:     "http://localhost:8000/api/product",
 		Timeout: 10,
 		Param: url.Values{
-			"limit":  []string{"100"},
+			"limit":  []string{"1000"},
 			"offset": []string{"0"},
 		},
 	})
@@ -152,53 +152,71 @@ func main() {
 
 	r.HandleFunc("GET /product", func(w http.ResponseWriter, r *http.Request) {
 		l := mlog.L(r.Context())
-		start := time.Now()
+		start := time.Now().UnixMilli()
+
+		const poolSize = 100   // Number of concurrent workers
+		const batchSize = 1000 // Process requests in batches to avoid overwhelming system resources
+
 		var wg sync.WaitGroup
-		responseCh := make(chan ProductResponse, len(idList))
-		poolSize := 20
 		semaphore := make(chan struct{}, poolSize)
+		responseCh := make(chan ProductResponse, batchSize)
 		var products []ProductResponse
-		for _, id := range idList {
-			wg.Add(1)
-			go func(id string) {
-				defer wg.Done()
-				semaphore <- struct{}{}
-				defer func() { <-semaphore }()
-				product, err := httpService.HttpGetClient[TProductResponse](&httpService.Options{
-					URL:     fmt.Sprintf("http://localhost:8000/api/product/%s", id),
-					Timeout: 60,
-				})
-				if err != nil {
-					log.Println("Error on getting product", err)
-					return
-				}
 
-				l.Info("Response", "product", product)
+		// Function to process a batch of requests
+		processBatch := func(batch []string) {
+			for _, id := range batch {
+				wg.Add(1)
+				go func(id string) {
+					defer wg.Done()
+					semaphore <- struct{}{} // Limit concurrency
+					defer func() { <-semaphore }()
 
-				responseCh <- product.Data.Data
+					// HTTP request to fetch product data
+					product, err := httpService.HttpGetClient[TProductResponse](&httpService.Options{
+						URL:     fmt.Sprintf("http://localhost:8000/api/product/%s", id),
+						Timeout: 60,
+					})
+					if err != nil {
+						l.Error("Error fetching product", "id", id, "error", err)
+						return
+					}
 
-			}(id)
+					// Log product response
+					l.Info("Received product", "id", id, "product", product)
+
+					// Send product response to channel
+					responseCh <- product.Data.Data
+				}(id)
+			}
 		}
 
+		// Batch processing to limit memory consumption
+		for i := 0; i < len(idList); i += batchSize {
+			fmt.Println("Processing batch =============> ", i)
+			end := i + batchSize
+			if end > len(idList) {
+				end = len(idList)
+			}
+			processBatch(idList[i:end])
+		}
+
+		// Wait for all goroutines to finish and close the channel
 		go func() {
 			wg.Wait()
 			close(responseCh)
 		}()
+
+		// Collect product responses
 		for data := range responseCh {
 			products = append(products, data)
 		}
-		response := map[string]any{
-			"durations": fmt.Sprintf("%.2f ms", float64(time.Since(start).Milliseconds())/1000.0),
-			"products":  products,
-			"status":    "success",
-			"total":     len(products),
-		}
-		SaveExcelFile(products)
-		json.NewEncoder(w).Encode(response)
+
+		// Send response back to client
+		ResponseProducts(w, products, start)
 	})
 
 	r.HandleFunc("GET /products", func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
+		start := time.Now().UnixMilli()
 		var products []ProductResponse
 
 		for _, id := range idList {
@@ -212,24 +230,29 @@ func main() {
 				w.Write([]byte("Error fetching product."))
 				return
 			}
+			logger.Info("Received product", "id", id, "product", apiResponse.Data.Data)
 			products = append(products, apiResponse.Data.Data)
 		}
 
-		response := map[string]any{
-			"durations": fmt.Sprintf("%.2f ms", float64(time.Since(start).Milliseconds())/1000.0),
-			"products":  products,
-			"status":    "success",
-			"total":     len(products),
-		}
-
-		SaveExcelFile(products)
-		// set json content type
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(response)
+		ResponseProducts(w, products, start)
 	})
 
 	StartHttp(r, logger)
+}
+
+func ResponseProducts(w http.ResponseWriter, products []ProductResponse, start int64) {
+	response := map[string]any{
+		"durations": fmt.Sprintf("%.2f ms", float64(time.Now().UnixMilli()-start)/1000),
+		"products":  products,
+		"status":    "success",
+		"total":     len(products),
+	}
+
+	SaveExcelFile(products)
+	// set json content type
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
 }
 
 func StartHttp(r *http.ServeMux, logger *slog.Logger) {
@@ -297,9 +320,9 @@ func AsyncHTTP(users []string) ([]string, error) {
 				mu.Unlock()
 				return
 			}
-			mu.Lock()
+			// mu.Lock()
 			result = append(result, data["login"].(string))
-			mu.Unlock()
+			// mu.Unlock()
 		}(user)
 	}
 	wg.Wait()

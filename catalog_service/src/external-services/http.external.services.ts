@@ -132,6 +132,7 @@ export class HttpService {
         }
         const config: AxiosRequestConfig<TBody> = {
             method: 'post',
+            url: this.configService.endpoint,
             headers: this.configService.headers ? this.configService.headers : option.headers || {},
             auth: this.configService.auth,
             timeout: this.configService.timeout,
@@ -162,6 +163,7 @@ export class HttpService {
             result.status = response.status
             return result
         } catch (error) {
+            console.error('===================>', error)
             if (error instanceof AxiosError) {
                 logger.error(error, `AxiosError`)
                 result.err = true

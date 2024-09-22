@@ -136,8 +136,14 @@ func HttpGetClient[TResponse any](opt *Options) (result HttpResponse[*TResponse]
 		opt.Timeout = 30
 	}
 
+	// Create a reusable HTTP client with connection pooling
 	client := &http.Client{
 		Timeout: opt.Timeout * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 100,
+			IdleConnTimeout:     90 * time.Second,
+		},
 	}
 
 	resp, err := client.Do(req)
