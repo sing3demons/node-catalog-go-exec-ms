@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -102,6 +104,34 @@ func loadProducts() []string {
 	return idList
 }
 
+type UploadFileBody struct {
+	Success    bool   `json:"success"`
+	Message    string `json:"message"`
+	StatusCode int    `json:"statusCode"`
+	Data       struct {
+		ID       string `json:"id"`
+		Href     string `json:"href"`
+		FileName string `json:"fileName"`
+		FilePath string `json:"filePath"`
+		Mimetype string `json:"mimetype"`
+		Size     int    `json:"size"`
+	} `json:"data"`
+}
+
+type CreateProductResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	Data    struct {
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		Price       int    `json:"price"`
+		Stock       int    `json:"stock"`
+		Description string `json:"description"`
+		Image       string `json:"image"`
+	} `json:"data"`
+	StatusCode int `json:"statusCode"`
+}
+
 func UploadFile(w http.ResponseWriter, r *http.Request) {
 	r.ParseMultipartForm(128 * 1024)
 	logger := mlog.L(r.Context())
@@ -113,9 +143,9 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	apiResponse, err := httpService.HttpPostForm[any](
+	apiResponse, err := httpService.HttpPostForm[UploadFileBody](
 		httpService.OptionPostForm{
-			URL: "http://localhost:8000/api/upload",
+			URL: "http://localhost:8001/api/upload",
 			FormFiles: []httpService.FormFile{
 				{
 					File:       file,
@@ -124,6 +154,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 			},
 			Fields: map[string]string{
 				"replaceFileName": r.FormValue("name"),
+				"filePath":        r.FormValue("subfolder"),
 			},
 		},
 	)
@@ -138,6 +169,65 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(apiResponse)
+}
+
+type TCreateProduct struct {
+	Name        string  `json:"name"`
+	Price       float64 `json:"price"`
+	Description string  `json:"description"`
+	Image       string  `json:"image"`
+	Stock       int     `json:"stock"`
+}
+
+func CreateProduct(w http.ResponseWriter, r *http.Request) {
+	r.ParseMultipartForm(128 * 1024)
+	logger := mlog.L(r.Context())
+	file, fileHeader, err := r.FormFile("file")
+	if err != nil {
+		logger.Error("Error parsing the file.")
+		w.Write([]byte("Error parsing the file."))
+		return
+	}
+	defer file.Close()
+
+	apiResponse, err := httpService.HttpPostForm[UploadFileBody](
+		httpService.OptionPostForm{
+			URL: "http://localhost:8001/api/upload",
+			FormFiles: []httpService.FormFile{
+				{
+					File:       file,
+					FileHeader: fileHeader,
+				},
+			},
+			Fields: map[string]string{
+				"replaceFileName": r.FormValue("name"),
+				"filePath":        "products",
+			},
+		},
+	)
+
+	if err != nil {
+		logger.Error("Error uploading the file.")
+		w.Write([]byte("Error uploading the file."))
+		return
+	}
+
+	price, _ := strconv.ParseFloat(r.FormValue("price"), 64)
+	stock, _ := strconv.Atoi(r.FormValue("stock"))
+	payload := TCreateProduct{
+		Name:        r.FormValue("name"),
+		Price:       price,
+		Description: r.FormValue("description"),
+		Image:       strings.Replace(apiResponse.Data.Data.Href, "{BASE_URL}", "http://localhost:8001", 1),
+		Stock:       stock,
+	}
+	apiCreate := httpService.HttpPostClient[CreateProductResponse]("http://localhost:8000/api/product", payload, httpService.Options{})
+
+	// set json content type
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	logger.Info("Product created successfully.", "product", apiCreate)
+	json.NewEncoder(w).Encode(apiCreate.Data)
 }
 
 func GetProductMulti(r *http.Request, idList []string) []ProductResponse {
@@ -211,6 +301,8 @@ func main() {
 	r := http.NewServeMux()
 
 	r.HandleFunc("POST /upload", UploadFile)
+
+	r.HandleFunc("POST /product", CreateProduct)
 
 	r.HandleFunc("GET /product", func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now().UnixMilli()

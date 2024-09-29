@@ -206,20 +206,20 @@ func handleResponse[TResponse any](resp *http.Response, result HttpResponse[*TRe
 	return result, nil
 }
 
-func HttpPostClient[TResponse any, TBody map[string]any](url string, payload TBody, opt Options) (result HttpResponse[*TResponse], err error) {
+func HttpPostClient[TResponse any, TBody any](url string, payload TBody, opt Options) (result HttpResponse[*TResponse]) {
 	result.StatusCode = http.StatusInternalServerError
 	jsonBody, err := json.Marshal(payload)
 	if err != nil {
 		log.Printf("Error marshaling payload: %v\n", err)
 		result.Message = err.Error()
-		return result, err
+		return result
 	}
 
 	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(string(jsonBody)))
 	if err != nil {
 		log.Printf("Error creating request for URL %s: %v\n", url, err)
 		result.Message = err.Error()
-		return result, err
+		return result
 	}
 
 	if opt.Timeout == 0 {
@@ -236,7 +236,7 @@ func HttpPostClient[TResponse any, TBody map[string]any](url string, payload TBo
 	if err != nil {
 		log.Printf("Error sending request to URL %s: %v\n", url, err)
 		result.Message = err.Error()
-		return result, err
+		return result
 	}
 	defer resp.Body.Close()
 	result.StatusCode = resp.StatusCode
@@ -245,7 +245,7 @@ func HttpPostClient[TResponse any, TBody map[string]any](url string, payload TBo
 	if err != nil {
 		log.Printf("Error reading response from URL %s: %v\n", url, err)
 		result.Message = err.Error()
-		return result, err
+		return result
 	}
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
@@ -258,9 +258,9 @@ func HttpPostClient[TResponse any, TBody map[string]any](url string, payload TBo
 		log.Printf("Error unmarshaling response: %v\n", err)
 		result.Message = err.Error()
 		result.Data = nil
-		return result, err
+		return result
 	}
-	return result, nil
+	return result
 }
 
 func HttpPostForm[TResponse any](opt OptionPostForm) (result HttpResponse[*TResponse], err error) {

@@ -3,7 +3,7 @@ import { AppRouter, t } from "../my-router"
 import path from 'path'
 import fs from 'fs'
 import { UploadedFile } from 'express-fileupload'
-import { fileSchema, IUploadFileResponse, UploadFileSchema } from "../models/upload.model"
+import { fileSchema, GetUploadFileSchema, IUploadFileResponse, UploadFileSchema } from "../models/upload.model"
 import { HttpLogger } from "../logger"
 import { FileRepository } from "../repository/file.repository"
 import { FileService } from "../service/file.service"
@@ -132,7 +132,7 @@ appRouter.get('/file', async ({ query: { filePath, filename, options = 'base64' 
         data
     }
 }, {
-    query: UploadFileSchema
+    query: GetUploadFileSchema
 })
 
 appRouter.delete('/file/:filename', async ({ params: { filename }, query, req }) => {
@@ -153,7 +153,6 @@ appRouter.delete('/file/:filename', async ({ params: { filename }, query, req })
 
 
 appRouter.get('/files', async () => {
-    const data = await fileService.walk(rootDir)
     const [err, results] = await fileService.walk(rootDir)
     if (err) {
         return {

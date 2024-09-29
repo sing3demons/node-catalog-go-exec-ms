@@ -50,7 +50,7 @@ export class FileService {
             response.message = 'file uploaded'
             response.data = {
                 id: result.id,
-                href: `{BASE_URL}/${result.fileName}`,
+                href: path.join('{BASE_URL}', `${file.filePath.replace('public', '')}`, `${result.fileName}`),
                 fileName: result.fileName,
                 filePath: result.filePath,
                 mimetype: result.mimetype,

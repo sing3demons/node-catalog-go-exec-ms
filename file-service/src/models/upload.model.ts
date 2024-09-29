@@ -6,6 +6,11 @@ import { Stats } from "fs"
 export const UploadFileSchema = t.object({
     replaceFileName: t.string().optional(),
     filePath: t.string().optional(),
+})
+
+export const GetUploadFileSchema = t.object({
+    replaceFileName: t.string().optional(),
+    filePath: t.string().optional(),
     filename: t.string(),
     options: t.enum(["ascii"
         , "utf8"
