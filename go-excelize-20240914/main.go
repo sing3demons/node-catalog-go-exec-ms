@@ -132,13 +132,16 @@ type CreateProductResponse struct {
 	StatusCode int `json:"statusCode"`
 }
 
-func UploadFile(w http.ResponseWriter, r *http.Request) {
+type ProductHandler struct {
+}
+
+func (p *ProductHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	r.ParseMultipartForm(128 * 1024)
 	logger := mlog.L(r.Context())
 	file, fileHeader, err := r.FormFile("file")
 	if err != nil {
 		logger.Error("error parsing the file.", "error", err)
-		ResponseJson(w, map[string]string{"message": "Error parsing the file"}, http.StatusBadRequest)
+		p.ResponseJson(w, map[string]string{"message": "Error parsing the file"}, http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
@@ -159,10 +162,10 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 
-	ResponseJson(w, apiResponse, http.StatusOK)
+	p.ResponseJson(w, apiResponse, http.StatusOK)
 }
 
-func ResponseJson(w http.ResponseWriter, data interface{}, code int) {
+func (p *ProductHandler) ResponseJson(w http.ResponseWriter, data interface{}, code int) {
 	w.Header().Set(httpService.ContentType, httpService.ContentTypeJSON)
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(data)
@@ -176,13 +179,13 @@ type TCreateProduct struct {
 	Stock       int     `json:"stock"`
 }
 
-func CreateProduct(w http.ResponseWriter, r *http.Request) {
+func (p *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	r.ParseMultipartForm(128 * 1024)
 	logger := mlog.L(r.Context())
 	file, fileHeader, err := r.FormFile("file")
 	if err != nil {
 		logger.Error("Error parsing the file.")
-		ResponseJson(w, map[string]string{
+		p.ResponseJson(w, map[string]string{
 			"message": "Error parsing the file",
 		}, http.StatusBadRequest)
 		return
@@ -218,11 +221,11 @@ func CreateProduct(w http.ResponseWriter, r *http.Request) {
 
 	// set json content type
 	logger.Info("Product created successfully.", "product", apiCreate)
-	ResponseJson(w, apiCreate.Data, http.StatusOK)
+	p.ResponseJson(w, apiCreate.Data, http.StatusOK)
 
 }
 
-func GetProductMulti(r *http.Request, idList []string) []ProductResponse {
+func (p *ProductHandler) GetProductMulti(r *http.Request, idList []string) []ProductResponse {
 	l := mlog.L(r.Context())
 
 	const poolSize = 100   // Number of concurrent workers
@@ -263,7 +266,6 @@ func GetProductMulti(r *http.Request, idList []string) []ProductResponse {
 
 	// Batch processing to limit memory consumption
 	for i := 0; i < len(idList); i += batchSize {
-		fmt.Println("Processing batch =============> ", i)
 		end := i + batchSize
 		if end > len(idList) {
 			end = len(idList)
@@ -291,15 +293,14 @@ func main() {
 	idList := loadProducts()
 
 	r := http.NewServeMux()
+	h := &ProductHandler{}
 
-	r.HandleFunc("POST /upload", UploadFile)
-
-	r.HandleFunc("POST /product", CreateProduct)
-
+	r.HandleFunc("POST /upload", h.UploadFile)
+	r.HandleFunc("POST /product", h.CreateProduct)
 	r.HandleFunc("GET /product", func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now().UnixMilli()
-		products := GetProductMulti(r, idList)
-		ResponseProducts(w, products, start)
+		products := h.GetProductMulti(r, idList)
+		h.ResponseProducts(w, products, start)
 	})
 
 	r.HandleFunc("GET /products", func(w http.ResponseWriter, r *http.Request) {
@@ -321,13 +322,13 @@ func main() {
 			products = append(products, apiResponse.Data.Data)
 		}
 
-		ResponseProducts(w, products, start)
+		h.ResponseProducts(w, products, start)
 	})
 
 	StartHttp(r, logger)
 }
 
-func ResponseProducts(w http.ResponseWriter, products []ProductResponse, start int64) {
+func (p *ProductHandler) ResponseProducts(w http.ResponseWriter, products []ProductResponse, start int64) {
 	response := map[string]any{
 		"durations": fmt.Sprintf("%.2f ms", float64(time.Now().UnixMilli()-start)/1000),
 		"products":  products,
@@ -336,8 +337,7 @@ func ResponseProducts(w http.ResponseWriter, products []ProductResponse, start i
 	}
 
 	SaveExcelFile(products)
-	// set json content type
-	ResponseJson(w, response, http.StatusOK)
+	p.ResponseJson(w, response, http.StatusOK)
 }
 
 func StartHttp(r *http.ServeMux, logger *slog.Logger) {
