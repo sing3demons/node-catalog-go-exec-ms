@@ -81,8 +81,8 @@ func (h httpServiceConfig) FetchData(url string) Result[string] {
 }
 
 const (
-	keyContentType  = "Content-Type"
-	contentTypeJSON = "application/json"
+	ContentType     = "Content-Type"
+	ContentTypeJSON = "application/json"
 )
 
 type Options struct {
@@ -173,10 +173,10 @@ func addQueryParams(u *url.URL, params url.Values) {
 
 func setHeaders(req *http.Request, headers map[string]string, defaultContentType ...string) {
 	if len(defaultContentType) > 0 {
-		req.Header.Set(keyContentType, defaultContentType[0])
+		req.Header.Set(ContentType, defaultContentType[0])
 
 	} else {
-		req.Header.Set(keyContentType, contentTypeJSON)
+		req.Header.Set(ContentType, ContentTypeJSON)
 	}
 
 	for key, value := range headers {
@@ -263,12 +263,12 @@ func HttpPostClient[TResponse any, TBody any](url string, payload TBody, opt Opt
 	return result
 }
 
-func HttpPostForm[TResponse any](opt OptionPostForm) (result HttpResponse[*TResponse], err error) {
+func HttpPostForm[TResponse any](opt OptionPostForm) (result HttpResponse[*TResponse]) {
 	payload, writer, err := createMultipartPayload(opt)
 	if err != nil {
 		result.StatusCode = http.StatusInternalServerError
 		result.Message = err.Error()
-		return result, err
+		return result
 	}
 
 	req, err := http.NewRequest(http.MethodPost, opt.URL, payload)
@@ -276,7 +276,7 @@ func HttpPostForm[TResponse any](opt OptionPostForm) (result HttpResponse[*TResp
 		log.Println("Error creating request.", err)
 		result.StatusCode = http.StatusInternalServerError
 		result.Message = err.Error()
-		return result, err
+		return result
 	}
 
 	setHeaders(req, opt.Headers, writer.FormDataContentType())
@@ -290,7 +290,7 @@ func HttpPostForm[TResponse any](opt OptionPostForm) (result HttpResponse[*TResp
 		result.StatusCode = http.StatusInternalServerError
 		result.Message = err.Error()
 		log.Println("Error sending request.", err)
-		return result, err
+		return result
 	}
 	defer resp.Body.Close()
 
@@ -299,7 +299,7 @@ func HttpPostForm[TResponse any](opt OptionPostForm) (result HttpResponse[*TResp
 		log.Println("Error reading response.", err)
 		result.StatusCode = http.StatusInternalServerError
 		result.Message = err.Error()
-		return result, err
+		return result
 	}
 
 	result.StatusCode = resp.StatusCode
@@ -313,9 +313,9 @@ func HttpPostForm[TResponse any](opt OptionPostForm) (result HttpResponse[*TResp
 	if err := json.Unmarshal(respBody, &result.Data); err != nil {
 		log.Println("Error unmarshaling response.", err)
 		result.Data = nil
-		return result, err
+		return result
 	}
-	return result, nil
+	return result
 }
 
 func createMultipartPayload(opt OptionPostForm) (*bytes.Buffer, *multipart.Writer, error) {

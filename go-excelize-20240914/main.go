@@ -137,13 +137,13 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	logger := mlog.L(r.Context())
 	file, fileHeader, err := r.FormFile("file")
 	if err != nil {
-		logger.Error("Error parsing the file.")
-		w.Write([]byte("Error parsing the file."))
+		logger.Error("error parsing the file.", "error", err)
+		ResponseJson(w, map[string]string{"message": "Error parsing the file"}, http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
-	apiResponse, err := httpService.HttpPostForm[UploadFileBody](
+	apiResponse := httpService.HttpPostForm[UploadFileBody](
 		httpService.OptionPostForm{
 			URL: "http://localhost:8001/api/upload",
 			FormFiles: []httpService.FormFile{
@@ -159,16 +159,13 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 
-	if err != nil {
-		logger.Error("Error uploading the file.")
-		w.Write([]byte("Error uploading the file."))
-		return
-	}
+	ResponseJson(w, apiResponse, http.StatusOK)
+}
 
-	// set json content type
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(apiResponse)
+func ResponseJson(w http.ResponseWriter, data interface{}, code int) {
+	w.Header().Set(httpService.ContentType, httpService.ContentTypeJSON)
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(data)
 }
 
 type TCreateProduct struct {
@@ -185,12 +182,14 @@ func CreateProduct(w http.ResponseWriter, r *http.Request) {
 	file, fileHeader, err := r.FormFile("file")
 	if err != nil {
 		logger.Error("Error parsing the file.")
-		w.Write([]byte("Error parsing the file."))
+		ResponseJson(w, map[string]string{
+			"message": "Error parsing the file",
+		}, http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
-	apiResponse, err := httpService.HttpPostForm[UploadFileBody](
+	apiResponse := httpService.HttpPostForm[UploadFileBody](
 		httpService.OptionPostForm{
 			URL: "http://localhost:8001/api/upload",
 			FormFiles: []httpService.FormFile{
@@ -206,12 +205,6 @@ func CreateProduct(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 
-	if err != nil {
-		logger.Error("Error uploading the file.")
-		w.Write([]byte("Error uploading the file."))
-		return
-	}
-
 	price, _ := strconv.ParseFloat(r.FormValue("price"), 64)
 	stock, _ := strconv.Atoi(r.FormValue("stock"))
 	payload := TCreateProduct{
@@ -224,10 +217,9 @@ func CreateProduct(w http.ResponseWriter, r *http.Request) {
 	apiCreate := httpService.HttpPostClient[CreateProductResponse]("http://localhost:8000/api/product", payload, httpService.Options{})
 
 	// set json content type
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	logger.Info("Product created successfully.", "product", apiCreate)
-	json.NewEncoder(w).Encode(apiCreate.Data)
+	ResponseJson(w, apiCreate.Data, http.StatusOK)
+
 }
 
 func GetProductMulti(r *http.Request, idList []string) []ProductResponse {
@@ -345,9 +337,7 @@ func ResponseProducts(w http.ResponseWriter, products []ProductResponse, start i
 
 	SaveExcelFile(products)
 	// set json content type
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	ResponseJson(w, response, http.StatusOK)
 }
 
 func StartHttp(r *http.ServeMux, logger *slog.Logger) {
