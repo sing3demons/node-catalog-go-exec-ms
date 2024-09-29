@@ -134,3 +134,4 @@ coverage
 db-data
 public
 migrations
+package-lock.json
